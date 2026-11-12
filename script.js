@@ -8,7 +8,7 @@ const METRICS = {total:'Total combinado', no_promovidos:'No promovidos', abandon
 const DATA = {'2025-2026':'data/trayectorias_2025_2026.json','2026-2027':'data/trayectorias_2026_2027.json'};
 const CDMX = {xmin:-99.38,ymin:19.03,xmax:-98.91,ymax:19.61,spatialReference:{wkid:4326}};
 const palette = ['#e6d194','#a57f2c','#1e5b4f','#9b2247','#611232'];
-const state = {compare:false,selected:null,data:{},views:{},points:{},highlights:{},rows:{A:[],B:[]},toggles:{A:{points:true,clusters:true,heat:true},B:{points:true,clusters:true,heat:true}},heatFrames:{A:0,B:0},mapReady:{A:false,B:false},compareOpen:false};
+const state = {compare:false,selected:null,data:{},views:{},points:{},highlights:{},pointOffsets:{A:new Map(),B:new Map()},rows:{A:[],B:[]},toggles:{A:{points:true,clusters:true,heat:true},B:{points:true,clusters:true,heat:true}},heatFrames:{A:0,B:0},heatMotionFrames:{A:0,B:0},heatSnapshots:{A:null,B:null},heatRebuildTimers:{A:0,B:0},mapReady:{A:false,B:false},compareOpen:false};
 
 function numeric(v){return v == null || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null)}
 function school(row,cycle,index){
@@ -150,18 +150,49 @@ function setToggle(side,type,on){
   const btn=el(side,id);btn.setAttribute('aria-pressed',String(on));btn.classList.toggle('isActive',on);
   if(type==='heat'){
     const overlay=$('heat'+side);
-    if(!on)overlay.classList.remove('isVisible');
+    if(!on){overlay.classList.remove('isVisible');clearTimeout(state.heatRebuildTimers[side]);cancelAnimationFrame(state.heatFrames[side]);state.heatRebuildTimers[side]=0;state.heatFrames[side]=0;}
     else scheduleHeat(side);
     renderLegend(side,state.rows[side],control(side));
   }else renderMap(side);
 }
 function geometry(r){return new state.Point({longitude:r.lon,latitude:r.lat,spatialReference:{wkid:4326}})}
+/* Varios CCT pueden compartir exactamente la misma ubicación. En lugar de
+   dibujar símbolos uno encima de otro, los desplazamos sólo visualmente;
+   la geometría y las coordenadas originales de cada escuela permanecen intactas. */
+function schoolGraphics(rows,side,c,max){
+  const groups=new Map(),graphics=[],offsets=new Map();
+  for(const r of rows){
+    const key=r.lat.toFixed(7)+','+r.lon.toFixed(7);
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push(r);
+  }
+  for(const sameLocation of groups.values()){
+    sameLocation.sort((a,b)=>a.cct.localeCompare(b.cct));
+    const count=sameLocation.length;
+    sameLocation.forEach((r,i)=>{
+      // ArcGIS expresa xoffset/yoffset en puntos de pantalla, no en grados.
+      // 2–5 escuelas quedan separadas y seleccionables incluso con clústeres apagados.
+      const radius=count===1?0:Math.max(12,Math.min(22,9+count*2));
+      const angle=count===2?Math.PI*i:Math.PI/2+i*2*Math.PI/count;
+      const dx=count===1?0:Math.round(Math.cos(angle)*radius*10)/10;
+      const dy=count===1?0:Math.round(Math.sin(angle)*radius*10)/10;
+      const symbol=pointSymbol(r,c,max);
+      if(count>1){symbol.xoffset=dx;symbol.yoffset=dy}
+      offsets.set(r.cct,{xoffset:dx,yoffset:dy});
+      graphics.push(new state.Graphic({geometry:geometry(r),symbol,attributes:{kind:'school',cct:r.cct}}));
+    });
+  }
+  state.pointOffsets[side]=offsets;
+  return graphics;
+}
 function graphicsFor(rows,side){
   const view=state.views[side],toggles=state.toggles[side],output=[];
+  state.pointOffsets[side]=new Map();
   if(!view?.ready || !view.width || !view.height)return output;
   const c=control(side),max=Math.max(1,...rows.map(r=>value(r,c.metric,c.grade)||0));
-  if(!toggles.clusters){
-    if(toggles.points)rows.forEach(r=>output.push(new state.Graphic({geometry:geometry(r),symbol:pointSymbol(r,c,max),attributes:{kind:'school',cct:r.cct}})));
+  // A escala de detalle los clústeres se disuelven, incluso si comparten edificio.
+  if(!toggles.clusters || (toggles.points && view.zoom>=16.5)){
+    if(toggles.points)output.push(...schoolGraphics(rows,side,c,max));
     return output;
   }
   const radius=54,groups=[],buckets=new Map();
@@ -203,7 +234,7 @@ function pointSymbol(r,c,max){const n=value(r,c.metric,c.grade)||0;return {type:
 /* Densidad de casos al estilo del mapa de Movilidad (ponderación raíz cuadrada,
    degradado y desenfoque), adaptada a ESRI. Agregación en una malla de 10 píxeles,
    convolución gaussiana en dos pasadas: coste O(N + celdas * radio), sin círculos
-   individuales ni redibujado continuo durante zoom/pan. */
+   individuales. Mientras el mapa se mueve, solo se transforma el bitmap existente. */
 function heatGaussian(input,width,height,sigma){
   const radius=Math.ceil(sigma*3),kernel=new Float32Array(radius*2+1);
   let sum=0;
@@ -223,16 +254,39 @@ function heatGaussian(input,width,height,sigma){
   return out;
 }
 const HEAT_STOPS=[[30,91,79],[230,209,148],[166,128,45],[155,34,71],[97,18,50]];
+/* Mantener la textura térmica georreferenciada mientras el usuario mueve el mapa.
+   Tres anclas cartográficas permiten actualizar una matriz CSS de traslación,
+   escala y giro a 60 fps sin recalcular la densidad ni generar halos nuevos. */
+function rememberHeatExtent(side,view,w,h){
+  if(typeof view.toMap!=='function')return;
+  const anchors=[[0,0],[w,0],[0,h]].map(([x,y])=>view.toMap({x,y}));
+  if(anchors.every(Boolean))state.heatSnapshots[side]={w,h,anchors};
+}
+function followHeatMap(side){
+  const snapshot=state.heatSnapshots[side],view=state.views[side],canvas=$('heat'+side);
+  if(!snapshot||!view||!canvas||!canvas.classList.contains('isVisible'))return;
+  if(state.heatMotionFrames[side])return;
+  state.heatMotionFrames[side]=requestAnimationFrame(()=>{
+    state.heatMotionFrames[side]=0;
+    const snap=state.heatSnapshots[side];
+    if(!snap||!state.toggles[side].heat||!canvas.classList.contains('isVisible'))return;
+    const projected=snap.anchors.map(geometry=>view.toScreen(geometry));
+    if(projected.some(p=>!p||!Number.isFinite(p.x)||!Number.isFinite(p.y)))return;
+    const [p0,px,py]=projected;
+    const a=(px.x-p0.x)/snap.w,b=(px.y-p0.y)/snap.w;
+    const c=(py.x-p0.x)/snap.h,d=(py.y-p0.y)/snap.h;
+    if([a,b,c,d].some(v=>!Number.isFinite(v)))return;
+    canvas.style.transform=`matrix(${a},${b},${c},${d},${p0.x},${p0.y})`;
+  });
+}
+function smoothstep(x){const t=Math.max(0,Math.min(1,x));return t*t*(3-2*t)}
 function drawHeat(side){
   const canvas=$('heat'+side),view=state.views[side];
   if(!canvas||!state.toggles[side].heat||!view?.ready)return;
   const map=$('map'+side),w=Math.round(map.clientWidth),h=Math.round(map.clientHeight);
   if(w<40||h<40)return;
   const c=control(side),rows=(state.rows[side]||[]).filter(r=>(value(r,c.metric,c.grade)??0)>0);
-  const ctx=canvas.getContext('2d');if(!ctx)return;
-  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
-  ctx.clearRect(0,0,w,h);
-  if(rows.length===0){canvas.classList.remove('isVisible');return}
+  if(rows.length===0){canvas.classList.remove('isVisible');state.heatSnapshots[side]=null;return}
   const cell=10, sigma=Math.max(5.2,Math.min(9.5,Math.min(w,h)*.095/cell));
   const pad=Math.ceil(sigma*3)+2,cols=Math.ceil(w/cell),lines=Math.ceil(h/cell);
   const gw=cols+pad*2,gh=lines+pad*2;
@@ -256,7 +310,7 @@ function drawHeat(side){
   const blurred=heatGaussian(mass,gw,gh,sigma),density=heatGaussian(numbers,gw,gh,sigma);
   let peak=0;
   for(let y=0;y<lines;y++)for(let x=0;x<cols;x++)peak=Math.max(peak,blurred[(y+pad)*gw+x+pad]);
-  if(!peak){canvas.classList.remove('isVisible');return}
+  if(!peak){canvas.classList.remove('isVisible');state.heatSnapshots[side]=null;return}
   const oneSchoolKernel=1/(2*Math.PI*sigma*sigma);
   const cutoff=peak*.12;
   const thresholdCount=1.10*oneSchoolKernel;
@@ -266,29 +320,50 @@ function drawHeat(side){
   let hasColor=false;
   for(let y=0;y<lines;y++)for(let x=0;x<cols;x++){
     const i=(y+pad)*gw+x+pad,raw=blurred[i];
-    // Una sola escuela aislada no se convierte en un halo espectral.
-    if(raw<=cutoff||density[i]<=thresholdCount)continue;
+    // La transición suave elimina los bordes duros de las isodensidades.
+    // Suprimir núcleos aislados evita el aspecto de espectro escolar.
+    if(raw<=cutoff||density[i]<=oneSchoolKernel)continue;
     const t=Math.min(1,(raw-cutoff)/Math.max(1e-8,peak-cutoff));
+    const densityFade=smoothstep((density[i]-oneSchoolKernel)/(oneSchoolKernel*.65));
+    const opacity=Math.round(175*Math.pow(smoothstep(t),.78)*densityFade);
+    if(opacity<3)continue;
     const v=Math.min(3.999,t*4),k=Math.floor(v),mix=v-k;
     const a=HEAT_STOPS[k],b=HEAT_STOPS[k+1],j=(y*cols+x)*4;
     picture.data[j]=Math.round(a[0]+(b[0]-a[0])*mix);
     picture.data[j+1]=Math.round(a[1]+(b[1]-a[1])*mix);
     picture.data[j+2]=Math.round(a[2]+(b[2]-a[2])*mix);
-    picture.data[j+3]=Math.round(210*Math.pow(t,.73));
+    picture.data[j+3]=opacity;
     hasColor=true;
   }
   layerCtx.putImageData(picture,0,0);
-  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
-  ctx.drawImage(layer,0,0,w,h);
-  canvas.classList.toggle('isVisible',hasColor);
+  if(!hasColor){canvas.classList.remove('isVisible');state.heatSnapshots[side]=null;return}
+  // La actualización es atómica: se prepara en un lienzo auxiliar y luego se
+  // sustituye en un único fotograma, sin ocultar la superficie anterior.
+  const composited=document.createElement('canvas');composited.width=w;composited.height=h;
+  const finalCtx=composited.getContext('2d');if(!finalCtx)return;
+  finalCtx.imageSmoothingEnabled=true;finalCtx.imageSmoothingQuality='high';
+  finalCtx.drawImage(layer,0,0,w,h);
+  const ctx=canvas.getContext('2d');if(!ctx)return;
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
+  canvas.style.width=w+'px';canvas.style.height=h+'px';
+  canvas.style.transform='none';
+  ctx.clearRect(0,0,w,h);
+  ctx.drawImage(composited,0,0);
+  rememberHeatExtent(side,view,w,h);
+  canvas.classList.add('isVisible');
 }
 function scheduleHeat(side){
+  clearTimeout(state.heatRebuildTimers[side]);
   if(!state.toggles[side].heat)return;
   if(state.heatFrames[side])cancelAnimationFrame(state.heatFrames[side]);
-  state.heatFrames[side]=requestAnimationFrame(()=>{
-    state.heatFrames[side]=0;
-    if(state.views[side]?.stationary!==false)drawHeat(side);
-  });
+  // Se agrupan los cambios de extent del SDK; solo se recalcula con mapa quieto.
+  state.heatRebuildTimers[side]=setTimeout(()=>{
+    state.heatRebuildTimers[side]=0;
+    state.heatFrames[side]=requestAnimationFrame(()=>{
+      state.heatFrames[side]=0;
+      if(state.views[side]?.stationary!==false)drawHeat(side);
+    });
+  },75);
 }
 /* Leyenda vinculada a la simbología real: los cinco intervalos usan
    exactamente los mismos cortes que pointSymbol, sin alterar el renderer. */
@@ -333,17 +408,20 @@ function renderMap(side){
   const view=state.views[side];
   const layer=state.points[side];
   if(layer){layer.removeAll();layer.addMany(graphicsFor(rows,side));layer.visible=true}
+  if(state.selected?.side===side)markSelected(side,state.selected.row);
   if(state.toggles[side].heat)scheduleHeat(side);
 
 }
 function redrawClusters(side){
   if(!state.mapReady[side]||!state.points[side])return;
   const layer=state.points[side];layer.removeAll();layer.addMany(graphicsFor(state.rows[side],side));
+  if(state.selected?.side===side)markSelected(side,state.selected.row);
 }
 function markSelected(side,r){
   for(const other of ['A','B'])state.highlights[other]?.removeAll();
   const layer=state.highlights[side];if(!layer||r.lat===null||r.lon===null)return;
-  layer.add(new state.Graphic({geometry:geometry(r),symbol:{type:'simple-marker',style:'circle',size:20,color:[0,0,0,0],outline:{color:'#a57f2c',width:3}}}));
+  const offset=state.pointOffsets[side]?.get(r.cct)||{xoffset:0,yoffset:0};
+  layer.add(new state.Graphic({geometry:geometry(r),symbol:{type:'simple-marker',style:'circle',size:20,xoffset:offset.xoffset,yoffset:offset.yoffset,color:[0,0,0,0],outline:{color:'#a57f2c',width:3}}}));
 }
 function locateSchool(side){
   const c=control(side),query=c.search;if(!query)return;
@@ -371,8 +449,15 @@ function clearFilters(side){
 function handleMapClick(side,event){
   const view=state.views[side],layer=state.points[side];if(!layer)return;
   view.hitTest(event,{include:[layer]}).then(result=>{
-    const hit=result.results.find(x=>x.graphic?.attributes?.kind);
-    if(!hit)return;
+    const hits=result.results.filter(x=>x.graphic?.attributes?.kind);
+    if(!hits.length)return;
+    // Si dos símbolos se solapan parcialmente, ofrecer ambos CCT en la ficha.
+    const schoolIds=[...new Set(hits.filter(x=>x.graphic.attributes.kind==='school').map(x=>x.graphic.attributes.cct))];
+    if(schoolIds.length>1){
+      const rows=schoolIds.map(id=>state.rows[side].find(r=>r.cct===id)).filter(Boolean);
+      if(rows.length>1){renderClusterDetail(rows,side);return}
+    }
+    const hit=hits[0];
     const attr=hit.graphic.attributes;
     if(attr.kind==='school'){
       const row=available(control(side)).find(r=>r.cct===attr.cct);
@@ -402,10 +487,13 @@ function createView(side){
     // La recomposición de clústeres se realiza solo cuando termina el zoom o el desplazamiento.
     view.watch('stationary',stable=>{
       if(stable){redrawClusters(side);scheduleHeat(side)}
-      else $('heat'+side).classList.remove('isVisible');
+      else{clearTimeout(state.heatRebuildTimers[side]);followHeatMap(side)}
     });
-    view.watch('width',()=>{redrawClusters(side);scheduleHeat(side)});
-    view.watch('height',()=>scheduleHeat(side));
+    // ArcGIS actualiza extent durante el arrastre/zoom: mover solo la imagen
+    // anterior con GPU; recalcular densidades únicamente al detenerse.
+    view.watch('extent',()=>followHeatMap(side));
+    view.watch('width',()=>{followHeatMap(side);redrawClusters(side);scheduleHeat(side)});
+    view.watch('height',()=>{followHeatMap(side);scheduleHeat(side)});
   }).catch(e=>showError('No se pudo iniciar el mapa Esri: '+e.message));
   view.on('click',event=>handleMapClick(side,event));
 }
