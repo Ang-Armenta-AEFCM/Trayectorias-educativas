@@ -36,6 +36,10 @@
               <label class="searchField">Buscar CCT o nombre<input id="search" type="search" placeholder="CCT o escuela · Enter para localizar" autocomplete="off"></label>
             </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa A"><button type="button" class="layerButton isActive" id="showSchools" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClusters" aria-pressed="true">Clústeres</button><button type="button" class="layerButton" id="showHeat" aria-pressed="false">Zonas de calor</button></div><button class="secondary" id="clear">Limpiar filtros</button></div></div>
           </details>
+          <details id="legendA" class="mapLegend" open aria-label="Leyenda del mapa A">
+            <summary><strong>Leyenda · mapa A</strong><span id="legendSummaryA" class="legendSummary"></span></summary>
+            <div id="legendItemsA" class="legendItems" aria-live="polite"></div>
+          </details>
           <div class="mapWrap"><div id="mapA" class="map" aria-label="Mapa A"></div><div class="mapCaption">Mapa A · <span id="captionA">2025–2026</span></div></div>
         </section>
         <section class="mapCard hidden" id="cardB">
@@ -51,15 +55,19 @@
               <label class="searchField">Buscar CCT o nombre<input id="searchB" type="search" placeholder="CCT o escuela · Enter para localizar" autocomplete="off"></label>
             </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa B"><button type="button" class="layerButton isActive" id="showSchoolsB" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClustersB" aria-pressed="true">Clústeres</button><button type="button" class="layerButton" id="showHeatB" aria-pressed="false">Zonas de calor</button></div><button class="secondary" id="clearB">Limpiar filtros</button></div></div>
           </details>
+          <details id="legendB" class="mapLegend" open aria-label="Leyenda del mapa B">
+            <summary><strong>Leyenda · mapa B</strong><span id="legendSummaryB" class="legendSummary"></span></summary>
+            <div id="legendItemsB" class="legendItems" aria-live="polite"></div>
+          </details>
           <div class="mapWrap"><div id="mapB" class="map" aria-label="Mapa B"></div><div class="mapCaption">Mapa B · <span id="captionB">2026–2027</span></div></div>
         </section>
       </div>
       <div class="noticeArea"><p id="sourceNote" class="note"></p><p id="status" class="status" role="status" aria-live="polite"></p></div>
-      <section id="comparePanel" class="comparePanel hidden"><div class="compareHead"><div><h2>Ficha comparativa por CCT</h2><p>Selecciona escuelas de la misma alcaldía o de alcaldías diferentes; el mismo CCT puede compararse entre ciclos distintos.</p></div><button id="closeCompare" class="secondary">Cerrar ficha</button></div>
+      <section id="comparePanel" class="comparePanel hidden"><div class="compareHead"><div><h2>Ficha comparativa por CCT</h2><p>Elige dos CCT diferentes o el mismo CCT entre ciclos. Alcaldía, ciclo y sostenimiento se eligen arriba, en cada mapa.</p></div><button id="closeCompare" class="secondary">Cerrar ficha</button></div>
         <div class="compareSelectors">
-          <div><h3>Escuela A · <span id="compareCycleA">2025–2026</span></h3><label>Alcaldía<select id="compareAlcaldiaA"><option value="">Todas las alcaldías</option></select></label><label>CCT / escuela<select id="compareCctA"><option value="">Selecciona un CCT</option></select></label></div>
-          <div><h3>Escuela B · <span id="compareCycleB">2026–2027</span></h3><label>Alcaldía<select id="compareAlcaldiaB"><option value="">Todas las alcaldías</option></select></label><label>CCT / escuela<select id="compareCctB"><option value="">Selecciona un CCT</option></select></label></div>
-        </div><div id="compareResult"></div>
+          <label for="compareCctA"><span>Escuela A · <span id="compareCycleA">2025–2026</span></span><select id="compareCctA"><option value="">Selecciona un CCT</option></select></label>
+          <label for="compareCctB"><span>Escuela B · <span id="compareCycleB">2026–2027</span></span><select id="compareCctB"><option value="">Selecciona un CCT</option></select></label>
+        </div><div id="compareResult" class="compareResult"></div>
       </section>
     </section>
     <aside class="detail hidden" id="detail" aria-label="Ficha escolar"><div class="detailHead"><h2 id="detailTitle">Ficha escolar</h2><button id="closeDetail" aria-label="Cerrar ficha escolar" type="button">×</button></div><div id="detailContent" class="note"></div><button id="compareSelected" class="secondary" type="button" disabled>Comparar este CCT</button></aside>

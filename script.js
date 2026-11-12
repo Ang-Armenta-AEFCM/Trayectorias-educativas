@@ -51,14 +51,15 @@ function populateCycleFilters(side){
   refreshGradeOptions(side);
   options(side==='B'?'alcaldiaB':'alcaldia',unique(rows,'alcaldia'),'Todas las alcaldías');
   options(side==='B'?'sostenimientoB':'sostenimiento',unique(rows,'sostenimiento').filter(v=>!['SIN DATO','SIN REGISTRO',''].includes(normalize(v))),'Todos');
-  options('compareAlcaldia'+side,unique(rows,'alcaldia'),'Todas las alcaldías');
   fillSchoolSelect(side);
   $('filterCaption'+side).textContent=c.cycle;
   $('compareCycle'+side).textContent=c.cycle;
 }
 function fillSchoolSelect(side){
-  const c=control(side),elem=$('compareCct'+side),prev=elem.value,area=$('compareAlcaldia'+side).value;
-  const rows=available(c).filter(r=>!area||r.alcaldia===area).sort((a,b)=>a.cct.localeCompare(b.cct));
+  const c=control(side),elem=$('compareCct'+side),prev=elem.value;
+  // Los CCT de la comparación usan el ciclo, alcaldía y sostenimiento del mapa correspondiente.
+  // No se excluyen CCT por su métrica, grado o mínimo: la ficha puede mostrar otras variables.
+  const rows=available(c).filter(r=>matches(r,c,false)).sort((a,b)=>a.cct.localeCompare(b.cct));
   elem.replaceChildren(new Option('Selecciona un CCT',''),...rows.map(r=>new Option(r.cct+' · '+r.nombre,r.cct)));
   if(rows.some(r=>r.cct===prev))elem.value=prev;
 }
@@ -85,15 +86,21 @@ function closeDetail(){state.selected=null;$('detail').classList.add('hidden');$
 function findSelected(side){const c=control(side);return available(c).find(r=>r.cct===$('compareCct'+side).value)}
 function renderComparison(){
   if(!state.compareOpen)return;
-  const cell=side=>{
-    const r=findSelected(side);
-    if(!r)return '<div><p class="muted">Selecciona un CCT para consultar los registros de ese ciclo.</p></div>';
-    const selectedValue=value(r,control(side).metric,control(side).grade);
-    const extra=selectedValue===null?[]:[[METRICS[control(side).metric]+' · variable seleccionada',selectedValue]];
-    const data=rowsForDetail(r).filter(([k])=>!['CCT','Ciclo escolar','Domicilio','Turno'].includes(k));
-    return '<div><h3>'+escapeHTML(r.nombre)+'</h3><span class="pill">'+escapeHTML(r.cct+' · '+r.cycle)+'</span><p class="muted">'+escapeHTML([r.alcaldia,r.sostenimiento].filter(Boolean).join(' · '))+'</p>'+tableFromRows([...data,...extra])+'</div>';
+  const a=findSelected('A'),b=findSelected('B');
+  if(!a&&!b){
+    $('compareResult').innerHTML='<p class="muted compareHint">Selecciona una escuela en cada columna para comparar sus datos.</p>';
+    return;
+  }
+  const brief=(r,side)=>{
+    if(!r)return '<span class="muted">Selecciona un CCT</span>';
+    return '<strong>'+escapeHTML(r.nombre)+'</strong><span class="pill">'+escapeHTML(r.cct+' · '+r.cycle)+'</span><small>'+escapeHTML([r.alcaldia,r.sostenimiento].filter(Boolean).join(' · '))+'</small>';
   };
-  $('compareResult').innerHTML='<div class="compareData">'+cell('A')+cell('B')+'</div>';
+  const omit=new Set(['CCT','Ciclo escolar','Alcaldía','Sostenimiento','Turno','Domicilio']);
+  const ra=new Map(a?rowsForDetail(a).filter(([label])=>!omit.has(label)):[]);
+  const rb=new Map(b?rowsForDetail(b).filter(([label])=>!omit.has(label)):[]);
+  const names=[...new Set([...ra.keys(),...rb.keys()])];
+  const cell=(rows,key)=>rows.has(key)?escapeHTML(typeof rows.get(key)==='number'?fmt(rows.get(key)):rows.get(key)):'—';
+  $('compareResult').innerHTML='<div class="comparisonTableWrap"><table class="comparisonTable"><thead><tr><th scope="col">Indicador</th><th scope="col">'+brief(a,'A')+'</th><th scope="col">'+brief(b,'B')+'</th></tr></thead><tbody>'+names.map(key=>'<tr><th scope="row">'+escapeHTML(key)+'</th><td>'+cell(ra,key)+'</td><td>'+cell(rb,key)+'</td></tr>').join('')+'</tbody></table></div>';
 }
 function setCompareOpen(on){state.compareOpen=on;$('comparePanel').classList.toggle('hidden',!on);$('openComparePanel').classList.toggle('hidden',!state.compare)}
 function openCompare(selected=null){
@@ -101,13 +108,13 @@ function openCompare(selected=null){
   setCompareOpen(true);
   if(selected){
     const {row:r,side}=selected;
+    // No forzar el mismo CCT en ambos mapas: el otro selector es totalmente independiente.
+    // Si el CCT viene de una ficha, adaptar únicamente el filtro territorial de su lado.
     if(available(control(side)).some(x=>x.cct===r.cct)){
-      $('compareAlcaldia'+side).value=r.alcaldia;fillSchoolSelect(side);$('compareCct'+side).value=r.cct;
-    }
-    const other=side==='A'?'B':'A';
-    if(available(control(other)).some(x=>x.cct===r.cct)){
-      const rOther=available(control(other)).find(x=>x.cct===r.cct);
-      $('compareAlcaldia'+other).value=rOther.alcaldia;fillSchoolSelect(other);$('compareCct'+other).value=r.cct;
+      if(el(side,'alcaldia').value && el(side,'alcaldia').value!==r.alcaldia){el(side,'alcaldia').value='';}
+      if(el(side,'sostenimiento').value && el(side,'sostenimiento').value!==r.sostenimiento){el(side,'sostenimiento').value='';}
+      fillSchoolSelect(side);
+      $('compareCct'+side).value=r.cct;
     }
   }
   renderComparison();
@@ -189,13 +196,71 @@ function pointSymbol(r,c,max){const n=value(r,c.metric,c.grade)||0;return {type:
 function makeHeatLayer(rows,side){
   const c=control(side),active=rows.filter(r=>(value(r,c.metric,c.grade)??0)>0);
   if(!active.length)return null;
-  const nums=active.map(r=>value(r,c.metric,c.grade)).sort((a,b)=>a-b);
-  const p95=nums[Math.min(nums.length-1,Math.floor(nums.length*0.95))];
-  const source=active.map((r,i)=>new state.Graphic({geometry:geometry(r),attributes:{ObjectID:i+1,valor:Math.max(0,value(r,c.metric,c.grade))}}));
-  return new state.FeatureLayer({title:'Zonas de calor · '+c.cycle,source,objectIdField:'ObjectID',geometryType:'point',spatialReference:{wkid:4326},fields:[{name:'ObjectID',type:'oid'},{name:'valor',type:'double'}],renderer:{type:'heatmap',field:'valor',radius:26,minDensity:0,maxDensity:Math.max(8,p95*2),colorStops:[{ratio:0,color:'rgba(255,255,255,0)'},{ratio:0.15,color:'rgba(230,209,148,0.22)'},{ratio:0.35,color:'rgba(166,128,45,0.52)'},{ratio:0.60,color:'rgba(155,34,71,0.75)'},{ratio:1,color:'rgba(97,18,50,0.92)'}]},popupEnabled:false,visible:true});
+  // HeatmapRenderer (ArcGIS 4.31) usa densidad de kernel, no los valores brutos
+  // de la variable. maxDensity en decenas ocultaba todos los colores.
+  // Raíz cuadrada reduce el efecto de escuelas atípicas manteniendo el peso por casos.
+  const weights=active.map(r=>Math.sqrt(value(r,c.metric,c.grade))).sort((a,b)=>a-b);
+  const p90=weights[Math.min(weights.length-1,Math.floor(weights.length*0.9))];
+  const source=active.map((r,i)=>new state.Graphic({geometry:geometry(r),attributes:{ObjectID:i+1,peso:Math.sqrt(value(r,c.metric,c.grade))}}));
+  return new state.FeatureLayer({
+    title:'Zonas de calor · '+c.cycle,
+    source,objectIdField:'ObjectID',geometryType:'point',spatialReference:{wkid:4326},
+    fields:[{name:'ObjectID',type:'oid'},{name:'peso',type:'double'}],
+    renderer:{type:'heatmap',field:'peso',radius:40,minDensity:0,
+      maxDensity:Math.max(0.045,Math.min(0.38,p90*0.045)),
+      colorStops:[
+        {ratio:0,color:'rgba(230,209,148,0)'},
+        {ratio:0.07,color:'rgba(230,209,148,0.28)'},
+        {ratio:0.22,color:'rgba(230,209,148,0.66)'},
+        {ratio:0.42,color:'rgba(166,128,45,0.83)'},
+        {ratio:0.68,color:'rgba(155,34,71,0.93)'},
+        {ratio:1,color:'rgba(97,18,50,0.98)'}
+      ]},
+    popupEnabled:false,visible:true,opacity:0.9,listMode:'hide'
+  });
+}
+/* Leyenda vinculada a la simbología real: los cinco intervalos usan
+   exactamente los mismos cortes que pointSymbol, sin alterar el renderer. */
+function renderLegend(side,rows,c){
+  const target=$('legendItems'+side),summary=$('legendSummary'+side);
+  if(!target||!summary)return;
+  const enabled=state.toggles[side];
+  const counts=rows.map(row=>value(row,c.metric,c.grade)||0);
+  const total=counts.reduce((sum,n)=>sum+n,0);
+  const max=Math.max(1,...counts);
+  summary.textContent=fmt(rows.length)+' escuelas · '+fmt(total)+' casos';
+  const sections=[];
+  if(enabled.points){
+    const buckets=palette.map((color,index)=>({color,index,n:0}));
+    for(const n of counts){
+      const index=Math.min(4,Math.floor(n/max*5));
+      buckets[index].n++;
+    }
+    const items=buckets.filter(bucket=>bucket.n>0).map(bucket=>{
+      const start=Math.ceil(bucket.index*max/5);
+      const end=bucket.index===4?max:Math.ceil((bucket.index+1)*max/5)-1;
+      const range=start===end?fmt(start):fmt(start)+'–'+fmt(end);
+      return '<span class="legendBand"><i class="legendDot" style="background:'+bucket.color+'" aria-hidden="true"></i><b>'+range+'</b><small>casos · '+fmt(bucket.n)+' esc.</small></span>';
+    }).join('');
+    sections.push('<div class="legendGroup"><span class="legendGroupTitle">Puntos · casos por escuela</span><div class="legendBands">'+(items||'<span class="muted">Sin escuelas</span>')+'</div></div>');
+  }
+  if(enabled.clusters){
+    sections.push('<div class="legendGroup legendCluster"><span class="legendGroupTitle">Clústeres</span><div class="legendBands"><span class="legendClusterCircle" aria-hidden="true">N</span><span>N = escuelas agrupadas</span></div></div>');
+  }
+  if(enabled.heat){
+    const active=counts.filter(n=>n>0);
+    const sumActive=active.reduce((sum,n)=>sum+n,0);
+    if(active.length){
+      sections.push('<div class="legendGroup legendHeat"><span class="legendGroupTitle">Calor · concentración de casos</span><div class="legendHeatScale"><span>Menor</span><span class="legendGradient" aria-hidden="true"></span><span>Mayor</span></div><small>'+fmt(sumActive)+' casos en '+fmt(active.length)+' escuelas; intensidad espacial, no casos por color</small></div>');
+    }else{
+      sections.push('<div class="legendGroup legendHeat"><span class="legendGroupTitle">Calor</span><span>Sin casos positivos para mostrar</span></div>');
+    }
+  }
+  target.innerHTML=sections.join('')||'<span class="muted">Activa puntos, clústeres o zonas de calor para ver su simbología.</span>';
 }
 function renderMap(side){
   const c=control(side),rows=filtered(side);state.rows[side]=rows;
+  renderLegend(side,rows,c);
   $('caption'+side).textContent=c.cycle+' · '+METRICS[c.metric]+(c.grade!=='total'?' · '+c.grade+'.º':'')+' · '+fmt(rows.length)+' escuelas';
   if(!state.mapReady[side])return;
   const view=state.views[side];
@@ -204,9 +269,22 @@ function renderMap(side){
   if(state.heat[side]){view.map.remove(state.heat[side]);state.heat[side].destroy();state.heat[side]=null}
   if(state.toggles[side].heat){
     const heat=makeHeatLayer(rows,side);
-    if(heat){view.map.add(heat,1);state.heat[side]=heat}
+    if(heat){
+      // Siempre sobre el mapa base y por debajo de puntos y clústeres, sin tapar sus clics.
+      const pointPosition=view.map.layers.indexOf(state.points[side]);
+      view.map.add(heat,pointPosition>=0?pointPosition:view.map.layers.length);
+      state.heat[side]=heat;
+      heat.when().catch(error=>{
+        console.warn('Zonas de calor:',error);
+        $('status').textContent='No fue posible dibujar las zonas de calor: '+error.message;
+      });
+    }else{
+      $('status').textContent='No hay casos positivos para mostrar zonas de calor con estos filtros.';
+    }
+  }else if($('status').textContent.startsWith('No hay casos positivos para mostrar zonas de calor')){
+    $('status').textContent='';
   }
-  // Los puntos permanecen por encima del mapa de calor; los límites y clústeres son seleccionables.
+  // Los puntos permanecen por encima del calor y conservan la selección por clic.
 }
 function redrawClusters(side){
   if(!state.mapReady[side]||!state.points[side])return;
@@ -238,7 +316,7 @@ function refresh(side,{cycleChanged=false}={}){
 }
 function clearFilters(side){
   for(const id of ['alcaldia','sostenimiento','metric','grado','minimum','search'])el(side,id).value=id==='metric'||id==='grado'?'total':id==='minimum'?'0':'';
-  $('status').textContent='';refresh(side);resetView(side);
+  $('status').textContent='';fillSchoolSelect(side);refresh(side);resetView(side);
 }
 function handleMapClick(side,event){
   const view=state.views[side],layer=state.points[side];if(!layer)return;
@@ -282,7 +360,12 @@ function bind(){
   for(const side of ['A','B']){
     for(const id of ['cycle','alcaldia','sostenimiento','metric','grado','minimum','search']){
       const input=el(side,id);
-      input.addEventListener(id==='search'||id==='minimum'?'input':'change',()=>{if(id==='metric')refreshGradeOptions(side);refresh(side,{cycleChanged:id==='cycle'})});
+      input.addEventListener(id==='search'||id==='minimum'?'input':'change',()=>{
+        if(id==='metric')refreshGradeOptions(side);
+        refresh(side,{cycleChanged:id==='cycle'});
+        if(id==='alcaldia'||id==='sostenimiento')fillSchoolSelect(side);
+        if(id==='alcaldia'||id==='sostenimiento')renderComparison();
+      });
       if(id==='search')input.addEventListener('keydown',event=>{
         if(event.key==='Enter'){event.preventDefault();locateSchool(side)}
         if(event.key==='Escape'){input.value='';refresh(side)}
@@ -292,7 +375,6 @@ function bind(){
       el(side,id).addEventListener('click',()=>setToggle(side,type,!state.toggles[side][type]));
     }
     el(side,'clear').addEventListener('click',()=>clearFilters(side));
-    $('compareAlcaldia'+side).addEventListener('change',()=>{fillSchoolSelect(side);renderComparison()});
     $('compareCct'+side).addEventListener('change',renderComparison);
   }
   $('toggleCompare').addEventListener('click',()=>toggleCompare(!state.compare));
