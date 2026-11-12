@@ -1,7 +1,69 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Trayectorias educativas | CDMX</title><link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/light/main.css"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="style.css"></head><body>
-<header><div class="institutionalBrand"><img class="govLogo" src="assets/gobierno-mexico-horizontal.png" alt="Gobierno de México"></div><div class="headerCopy"><span class="eyebrow">CDMX</span><h1>Trayectorias educativas de secundaria</h1><p>No promoción · Abandono · No certificación</p></div><button id="toggleCompare" class="primary">Comparar mapas</button></header>
-<main><aside class="sidebar"><h2>Filtros generales</h2><label>Ciclo escolar<select id="cycle"><option value="2025-2026">2025–2026</option><option value="2026-2027">2026–2027</option></select></label><label>Alcaldía<select id="alcaldia"><option value="">Todas las alcaldías</option></select></label><label>Sostenimiento<select id="sostenimiento"><option value="">Todos</option></select></label><label>Variable<select id="metric"><option value="total">Total combinado</option><option value="no_promovidos">No promovidos</option><option value="abandono">Abandono</option><option value="no_certificado">No certificados</option></select></label><label>Grado<select id="grado"><option value="total">Todos / total</option><option value="1">1.º</option><option value="2">2.º</option><option value="3">3.º</option></select></label><label>Mínimo de casos de variable<input id="minimum" type="number" min="0" step="1" value="0"></label><label>Buscar CCT o escuela<input id="search" type="search" placeholder="CCT o nombre"></label><label class="check"><input id="showSchools" type="checkbox" checked> Mostrar escuelas y clústeres</label><button id="clear" class="secondary">Limpiar filtros</button><div class="divider"></div><h2>Resumen visible</h2><div class="stats"><div><strong id="countSchools">—</strong><span>Escuelas con datos</span></div><div><strong id="countCases">—</strong><span>Casos</span></div><div><strong id="countMax">—</strong><span>Máximo</span></div></div><p id="sourceNote" class="note"></p><p id="status" class="status" role="status"></p></aside>
-<section class="workspace"><div class="workspaceTop"><strong id="viewTitle">Mapa de escuelas · CDMX</strong><button class="secondary" id="reset">Centrar CDMX</button></div><div id="mapGrid" class="mapGrid"><section class="mapCard"><div id="mapA" class="map"></div><div class="mapCaption">Mapa A · <span id="captionA">2025–2026</span></div></section><section class="mapCard hidden" id="cardB"><div class="mapControls"><label>Ciclo<select id="cycleB"><option value="2025-2026">2025–2026</option><option value="2026-2027">2026–2027</option></select></label><label>Alcaldía<select id="alcaldiaB"><option value="">Todas</option></select></label><label>Sostenimiento<select id="sostenimientoB"><option value="">Todos</option></select></label><label>Variable<select id="metricB"><option value="total">Total combinado</option><option value="no_promovidos">No promovidos</option><option value="abandono">Abandono</option><option value="no_certificado">No certificados</option></select></label><label>Grado<select id="gradoB"><option value="total">Todos</option><option value="1">1.º</option><option value="2">2.º</option><option value="3">3.º</option></select></label><label>Mínimo<input type="number" min="0" step="1" value="0" id="minimumB"></label><label>Buscar CCT<input id="searchB" type="search" placeholder="CCT o escuela"></label></div><div id="mapB" class="map"></div><div class="mapCaption">Mapa B · <span id="captionB">2025–2026</span></div></section></div><div id="mapNotice" class="note"></div>
-<section id="comparePanel" class="comparePanel hidden"><div class="compareHead"><div><h2>Ficha comparativa por CCT</h2><p>Compara escuelas de una misma alcaldía o de alcaldías diferentes. Es posible seleccionar el mismo CCT en ambos lados.</p></div><button id="closeCompare" class="secondary">Cerrar ficha</button></div><div class="compareSelectors"><div><h3>Escuela A</h3><label>Alcaldía<select id="compareAlcaldiaA"><option value="">Todas</option></select></label><label>CCT / escuela<select id="compareCctA"></select></label></div><div><h3>Escuela B</h3><label>Alcaldía<select id="compareAlcaldiaB"><option value="">Todas</option></select></label><label>CCT / escuela<select id="compareCctB"></select></label></div></div><div id="compareResult"></div></section>
-</section><aside class="detail" id="detail"><div class="detailHead"><h2 id="detailTitle">Ficha escolar</h2><button id="closeDetail" aria-label="Cerrar ficha">×</button></div><div id="detailContent" class="note">Selecciona una escuela en el mapa para ver los datos de trayectorias educativas.</div><button id="compareSelected" class="secondary" disabled>Comparar este CCT</button></aside></main>
-<script src="https://js.arcgis.com/4.31/"></script><script src="script.js"></script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Trayectorias educativas | CDMX</title>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/light/main.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="institutionalBrand"><img class="govLogo" src="assets/gobierno-mexico-horizontal.png" alt="Gobierno de México"></div>
+    <div class="headerCopy"><span class="eyebrow">SISTEMA DE INFORMACIÓN GEOGRÁFICA · CDMX</span><h1>Trayectorias educativas de secundaria</h1><p>No promoción · Abandono · No certificación</p></div>
+    <button id="toggleCompare" class="primary">Comparar mapas</button>
+  </header>
+  <main>
+    <section class="workspace" aria-label="Visor de trayectorias educativas">
+      <div class="workspaceTop">
+        <strong id="viewTitle">Mapa de escuelas · CDMX</strong>
+        <div class="topTools"><div class="stats" id="stats" aria-label="Resumen del mapa A"><div><strong id="countSchools">—</strong><span>Escuelas</span></div><div><strong id="countCases">—</strong><span>Casos</span></div><div><strong id="countMax">—</strong><span>Máximo</span></div></div><button class="secondary" id="reset">Centrar CDMX</button><button class="secondary hidden" id="openComparePanel">Ficha comparativa</button></div>
+      </div>
+      <div id="mapGrid" class="mapGrid">
+        <section class="mapCard" id="cardA">
+          <details id="filtersA" class="filtersPanel" open>
+            <summary><span>Filtros mapa A <small id="filterCaptionA">2025–2026</small></span><span class="disclosureHint">Mostrar / ocultar</span></summary>
+            <div class="filterBody"><div class="filterFields">
+              <label>Ciclo escolar<select id="cycle"><option value="2025-2026">2025–2026</option><option value="2026-2027">2026–2027</option></select></label>
+              <label>Alcaldía<select id="alcaldia"><option value="">Todas las alcaldías</option></select></label>
+              <label>Sostenimiento<select id="sostenimiento"><option value="">Todos</option></select></label>
+              <label>Variable<select id="metric"><option value="total">Total combinado</option><option value="no_promovidos">No promovidos</option><option value="abandono">Abandono</option><option value="no_certificado">No certificados</option></select></label>
+              <label>Grado<select id="grado"><option value="total">Todos / total</option><option value="1">1.º</option><option value="2">2.º</option><option value="3">3.º</option></select></label>
+              <label>Mínimo de casos<input id="minimum" type="number" min="0" step="1" value="0"></label>
+              <label class="searchField">Buscar CCT o nombre<input id="search" type="search" placeholder="CCT o escuela · Enter para localizar" autocomplete="off"></label>
+            </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa A"><button type="button" class="layerButton isActive" id="showSchools" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClusters" aria-pressed="true">Clústeres</button><button type="button" class="layerButton" id="showHeat" aria-pressed="false">Zonas de calor</button></div><button class="secondary" id="clear">Limpiar filtros</button></div></div>
+          </details>
+          <div class="mapWrap"><div id="mapA" class="map" aria-label="Mapa A"></div><div class="mapCaption">Mapa A · <span id="captionA">2025–2026</span></div></div>
+        </section>
+        <section class="mapCard hidden" id="cardB">
+          <details id="filtersB" class="filtersPanel" open>
+            <summary><span>Filtros mapa B <small id="filterCaptionB">2026–2027</small></span><span class="disclosureHint">Mostrar / ocultar</span></summary>
+            <div class="filterBody"><div class="filterFields">
+              <label>Ciclo escolar<select id="cycleB"><option value="2025-2026">2025–2026</option><option value="2026-2027" selected>2026–2027</option></select></label>
+              <label>Alcaldía<select id="alcaldiaB"><option value="">Todas las alcaldías</option></select></label>
+              <label>Sostenimiento<select id="sostenimientoB"><option value="">Todos</option></select></label>
+              <label>Variable<select id="metricB"><option value="total">Total combinado</option><option value="no_promovidos">No promovidos</option><option value="abandono">Abandono</option><option value="no_certificado">No certificados</option></select></label>
+              <label>Grado<select id="gradoB"><option value="total">Todos / total</option><option value="1">1.º</option><option value="2">2.º</option><option value="3">3.º</option></select></label>
+              <label>Mínimo de casos<input id="minimumB" type="number" min="0" step="1" value="0"></label>
+              <label class="searchField">Buscar CCT o nombre<input id="searchB" type="search" placeholder="CCT o escuela · Enter para localizar" autocomplete="off"></label>
+            </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa B"><button type="button" class="layerButton isActive" id="showSchoolsB" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClustersB" aria-pressed="true">Clústeres</button><button type="button" class="layerButton" id="showHeatB" aria-pressed="false">Zonas de calor</button></div><button class="secondary" id="clearB">Limpiar filtros</button></div></div>
+          </details>
+          <div class="mapWrap"><div id="mapB" class="map" aria-label="Mapa B"></div><div class="mapCaption">Mapa B · <span id="captionB">2026–2027</span></div></div>
+        </section>
+      </div>
+      <div class="noticeArea"><p id="sourceNote" class="note"></p><p id="status" class="status" role="status" aria-live="polite"></p></div>
+      <section id="comparePanel" class="comparePanel hidden"><div class="compareHead"><div><h2>Ficha comparativa por CCT</h2><p>Selecciona escuelas de la misma alcaldía o de alcaldías diferentes; el mismo CCT puede compararse entre ciclos distintos.</p></div><button id="closeCompare" class="secondary">Cerrar ficha</button></div>
+        <div class="compareSelectors">
+          <div><h3>Escuela A · <span id="compareCycleA">2025–2026</span></h3><label>Alcaldía<select id="compareAlcaldiaA"><option value="">Todas las alcaldías</option></select></label><label>CCT / escuela<select id="compareCctA"><option value="">Selecciona un CCT</option></select></label></div>
+          <div><h3>Escuela B · <span id="compareCycleB">2026–2027</span></h3><label>Alcaldía<select id="compareAlcaldiaB"><option value="">Todas las alcaldías</option></select></label><label>CCT / escuela<select id="compareCctB"><option value="">Selecciona un CCT</option></select></label></div>
+        </div><div id="compareResult"></div>
+      </section>
+    </section>
+    <aside class="detail hidden" id="detail" aria-label="Ficha escolar"><div class="detailHead"><h2 id="detailTitle">Ficha escolar</h2><button id="closeDetail" aria-label="Cerrar ficha escolar" type="button">×</button></div><div id="detailContent" class="note"></div><button id="compareSelected" class="secondary" type="button" disabled>Comparar este CCT</button></aside>
+  </main>
+  <script src="https://js.arcgis.com/4.31/"></script><script src="script.js"></script>
+</body>
+</html>
