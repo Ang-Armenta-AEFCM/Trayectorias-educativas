@@ -8,12 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=20261112-sin-calor">
+  <link rel="stylesheet" href="style.css?v=20261112-calor-suave-scroll">
 </head>
 <body>
   <header>
     <div class="institutionalBrand"><img class="govLogo" src="assets/gobierno-mexico-horizontal.png" alt="Gobierno de México"></div>
-    <div class="headerCopy"><span class="eyebrow"></span><h1>Trayectorias educativas de primaria y secundaria</h1><p>No promoción · Abandono · No certificación</p></div>
+    <div class="headerCopy"><span class="eyebrow">SISTEMA DE INFORMACIÓN GEOGRÁFICA · CDMX</span><h1>Trayectorias educativas de primaria y secundaria</h1><p>No promoción · Abandono · No certificación</p></div>
     <button id="toggleCompare" class="primary">Comparar mapas</button>
   </header>
   <main>
@@ -35,13 +35,13 @@
               <label>Grado<select id="grado"><option value="total">Todos / total</option><option value="1">1.º</option><option value="2">2.º</option><option value="3">3.º</option></select></label>
               <label>Mínimo de casos<input id="minimum" type="number" min="0" step="1" value="0"></label>
               <label class="searchField">Buscar CCT o nombre<input id="search" type="search" placeholder="CCT o escuela · Enter para localizar" autocomplete="off"></label>
-            </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa A"><button type="button" class="layerButton isActive" id="showSchools" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClusters" aria-pressed="true">Clústeres</button></div><button class="secondary" id="clear">Limpiar filtros</button></div></div>
+            </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa A"><button type="button" class="layerButton isActive" id="showSchools" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClusters" aria-pressed="true">Clústeres</button><button type="button" class="layerButton isActive" id="showHeat" aria-pressed="true">Zonas de calor</button></div><button class="secondary" id="clear">Limpiar filtros</button></div></div>
           </details>
           <details id="legendA" class="mapLegend" open aria-label="Leyenda del mapa A">
             <summary><strong>Leyenda · mapa A</strong><span id="legendSummaryA" class="legendSummary"></span></summary>
             <div id="legendItemsA" class="legendItems" aria-live="polite"></div>
           </details>
-          <div class="mapWrap"><div id="mapA" class="map" aria-label="Mapa A"></div><div class="mapCaption">Mapa A · <span id="captionA">2025–2026</span></div></div>
+          <div class="mapWrap"><div class="mapStage"><div id="mapA" class="map" aria-label="Mapa A"></div><canvas id="heatA" class="heatSurface" aria-hidden="true"></canvas></div><div class="mapCaption">Mapa A · <span id="captionA">2025–2026</span></div></div>
         </section>
         <section class="mapCard hidden" id="cardB">
           <details id="filtersB" class="filtersPanel" open>
@@ -55,13 +55,13 @@
               <label>Grado<select id="gradoB"><option value="total">Todos / total</option><option value="1">1.º</option><option value="2">2.º</option><option value="3">3.º</option></select></label>
               <label>Mínimo de casos<input id="minimumB" type="number" min="0" step="1" value="0"></label>
               <label class="searchField">Buscar CCT o nombre<input id="searchB" type="search" placeholder="CCT o escuela · Enter para localizar" autocomplete="off"></label>
-            </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa B"><button type="button" class="layerButton isActive" id="showSchoolsB" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClustersB" aria-pressed="true">Clústeres</button></div><button class="secondary" id="clearB">Limpiar filtros</button></div></div>
+            </div><div class="filterActions"><div class="layerToggles" aria-label="Capas del mapa B"><button type="button" class="layerButton isActive" id="showSchoolsB" aria-pressed="true">Puntos</button><button type="button" class="layerButton isActive" id="showClustersB" aria-pressed="true">Clústeres</button><button type="button" class="layerButton isActive" id="showHeatB" aria-pressed="true">Zonas de calor</button></div><button class="secondary" id="clearB">Limpiar filtros</button></div></div>
           </details>
           <details id="legendB" class="mapLegend" open aria-label="Leyenda del mapa B">
             <summary><strong>Leyenda · mapa B</strong><span id="legendSummaryB" class="legendSummary"></span></summary>
             <div id="legendItemsB" class="legendItems" aria-live="polite"></div>
           </details>
-          <div class="mapWrap"><div id="mapB" class="map" aria-label="Mapa B"></div><div class="mapCaption">Mapa B · <span id="captionB">2026–2027</span></div></div>
+          <div class="mapWrap"><div class="mapStage"><div id="mapB" class="map" aria-label="Mapa B"></div><canvas id="heatB" class="heatSurface" aria-hidden="true"></canvas></div><div class="mapCaption">Mapa B · <span id="captionB">2026–2027</span></div></div>
         </section>
       </div>
       <div class="noticeArea"><p id="sourceNote" class="note"></p><p id="status" class="status" role="status" aria-live="polite"></p></div>
@@ -74,6 +74,6 @@
     </section>
     <aside class="detail hidden" id="detail" aria-label="Ficha escolar"><div class="detailHead"><h2 id="detailTitle">Ficha escolar</h2><button id="closeDetail" aria-label="Cerrar ficha escolar" type="button">×</button></div><div id="detailContent" class="note"></div><button id="compareSelected" class="secondary" type="button" disabled>Comparar este CCT</button></aside>
   </main>
-  <script src="https://js.arcgis.com/4.31/"></script><script src="script.js?v=20261112-sin-calor"></script>
+  <script src="https://js.arcgis.com/4.31/"></script><script src="script.js?v=20261112-calor-suave-scroll"></script>
 </body>
 </html>

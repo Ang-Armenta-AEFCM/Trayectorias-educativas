@@ -60,3 +60,21 @@ main{height:calc(100vh - 90px);min-height:520px;position:relative}.workspace{hei
 .legendClusterCircle{display:inline-flex;align-items:center;justify-content:center;min-width:21px;height:21px;padding:0 3px;border:1.5px solid white;border-radius:50%;background:var(--vino);color:white;box-shadow:0 0 0 1px #a99b9b;font-weight:700}
 @media(max-width:540px){.mapLegend>summary{padding:7px 9px}.legendItems{padding:7px 9px;gap:9px}.legendBands{gap:5px 8px}.legendBand small{font-size:9px}}
 
+
+/* Página con desplazamiento vertical natural; mapas más amplios y sin panel interior forzado. */
+html{scroll-behavior:smooth}
+body{min-height:100vh;overflow-x:hidden;overflow-y:auto}
+main{height:auto;min-height:calc(100vh - 90px)}
+.workspace{height:auto;overflow:visible}
+.mapGrid{flex:none;min-height:0;align-items:start;grid-auto-rows:auto}
+.mapCard{min-height:0;overflow:visible}
+.mapWrap{height:clamp(485px,68vh,780px);min-height:485px;flex:none}
+.mapGrid.comparing .mapWrap{height:clamp(465px,61vh,720px);min-height:465px}
+.mapStage{position:relative;flex:1;min-height:0;width:100%;isolation:isolate}
+.mapStage>.map{position:absolute;inset:0;height:100%;width:100%;min-height:0}
+.heatSurface{position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;opacity:0;transition:opacity .16s ease;image-rendering:auto}
+.heatSurface.isVisible{opacity:1}
+@media(max-width:820px){.mapWrap,.mapGrid.comparing .mapWrap{height:500px;min-height:500px}.mapStage>.map{min-height:0}}
+@media(max-width:540px){.mapWrap,.mapGrid.comparing .mapWrap{height:445px;min-height:445px}}
+/* Escala del calor: distribución espacial continua, no halos por escuela. */
+.legendHeatScale{display:inline-block;width:112px;height:11px;border-radius:3px;background:linear-gradient(90deg,#1e5b4f 0%,#e6d194 26%,#a57f2c 57%,#9b2247 78%,#611232 100%);border:1px solid rgba(0,0,0,.12)}

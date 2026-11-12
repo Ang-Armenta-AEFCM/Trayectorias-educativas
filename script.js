@@ -8,7 +8,7 @@ const METRICS = {total:'Total combinado', no_promovidos:'No promovidos', abandon
 const DATA = {'2025-2026':'data/trayectorias_2025_2026.json','2026-2027':'data/trayectorias_2026_2027.json'};
 const CDMX = {xmin:-99.38,ymin:19.03,xmax:-98.91,ymax:19.61,spatialReference:{wkid:4326}};
 const palette = ['#e6d194','#a57f2c','#1e5b4f','#9b2247','#611232'];
-const state = {compare:false,selected:null,data:{},views:{},points:{},highlights:{},rows:{A:[],B:[]},toggles:{A:{points:true,clusters:true},B:{points:true,clusters:true}},mapReady:{A:false,B:false},compareOpen:false};
+const state = {compare:false,selected:null,data:{},views:{},points:{},highlights:{},rows:{A:[],B:[]},toggles:{A:{points:true,clusters:true,heat:true},B:{points:true,clusters:true,heat:true}},heatFrames:{A:0,B:0},mapReady:{A:false,B:false},compareOpen:false};
 
 function numeric(v){return v == null || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null)}
 function school(row,cycle,index){
@@ -146,9 +146,14 @@ function updateSummary(){
 }
 function setToggle(side,type,on){
   state.toggles[side][type]=on;
-  const id=type==='points'?'showSchools':'showClusters';
+  const id=type==='points'?'showSchools':type==='clusters'?'showClusters':'showHeat';
   const btn=el(side,id);btn.setAttribute('aria-pressed',String(on));btn.classList.toggle('isActive',on);
-  renderMap(side);
+  if(type==='heat'){
+    const overlay=$('heat'+side);
+    if(!on)overlay.classList.remove('isVisible');
+    else scheduleHeat(side);
+    renderLegend(side,state.rows[side],control(side));
+  }else renderMap(side);
 }
 function geometry(r){return new state.Point({longitude:r.lon,latitude:r.lat,spatialReference:{wkid:4326}})}
 function graphicsFor(rows,side){
@@ -195,6 +200,96 @@ function graphicsFor(rows,side){
   return output;
 }
 function pointSymbol(r,c,max){const n=value(r,c.metric,c.grade)||0;return {type:'simple-marker',style:'circle',size:9,color:palette[max===0?0:Math.min(4,Math.floor(n/max*5))],outline:{color:'#fff',width:1}}}
+/* Densidad de casos al estilo del mapa de Movilidad (ponderación raíz cuadrada,
+   degradado y desenfoque), adaptada a ESRI. Agregación en una malla de 10 píxeles,
+   convolución gaussiana en dos pasadas: coste O(N + celdas * radio), sin círculos
+   individuales ni redibujado continuo durante zoom/pan. */
+function heatGaussian(input,width,height,sigma){
+  const radius=Math.ceil(sigma*3),kernel=new Float32Array(radius*2+1);
+  let sum=0;
+  for(let k=-radius;k<=radius;k++){const v=Math.exp(-.5*(k/sigma)**2);kernel[k+radius]=v;sum+=v}
+  for(let k=0;k<kernel.length;k++)kernel[k]/=sum;
+  const temp=new Float32Array(input.length),out=new Float32Array(input.length);
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    let a=0;
+    for(let k=-radius;k<=radius;k++){const xx=x+k;if(xx>=0&&xx<width)a+=input[y*width+xx]*kernel[k+radius]}
+    temp[y*width+x]=a;
+  }
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    let a=0;
+    for(let k=-radius;k<=radius;k++){const yy=y+k;if(yy>=0&&yy<height)a+=temp[yy*width+x]*kernel[k+radius]}
+    out[y*width+x]=a;
+  }
+  return out;
+}
+const HEAT_STOPS=[[30,91,79],[230,209,148],[166,128,45],[155,34,71],[97,18,50]];
+function drawHeat(side){
+  const canvas=$('heat'+side),view=state.views[side];
+  if(!canvas||!state.toggles[side].heat||!view?.ready)return;
+  const map=$('map'+side),w=Math.round(map.clientWidth),h=Math.round(map.clientHeight);
+  if(w<40||h<40)return;
+  const c=control(side),rows=(state.rows[side]||[]).filter(r=>(value(r,c.metric,c.grade)??0)>0);
+  const ctx=canvas.getContext('2d');if(!ctx)return;
+  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
+  ctx.clearRect(0,0,w,h);
+  if(rows.length===0){canvas.classList.remove('isVisible');return}
+  const cell=10, sigma=Math.max(5.2,Math.min(9.5,Math.min(w,h)*.095/cell));
+  const pad=Math.ceil(sigma*3)+2,cols=Math.ceil(w/cell),lines=Math.ceil(h/cell);
+  const gw=cols+pad*2,gh=lines+pad*2;
+  const mass=new Float32Array(gw*gh),numbers=new Float32Array(gw*gh);
+  const counts=rows.map(r=>value(r,c.metric,c.grade)).sort((a,b)=>a-b);
+  const reference=Math.max(1,counts[Math.floor((counts.length-1)*.9)]);
+  // Pesar por casos, pero limitar valores atípicos que ocultaban la concentración.
+  for(const r of rows){
+    const xy=view.toScreen(geometry(r));
+    if(!xy||!Number.isFinite(xy.x)||!Number.isFinite(xy.y))continue;
+    const x=xy.x/cell+pad,y=xy.y/cell+pad;
+    const xi=Math.floor(x),yi=Math.floor(y),fx=x-xi,fy=y-yi;
+    if(xi<0||xi>=gw-1||yi<0||yi>=gh-1)continue;
+    const weight=Math.min(2.4,Math.sqrt(value(r,c.metric,c.grade)/reference));
+    const i=yi*gw+xi;
+    for(const [dx,dy,factor] of [[0,0,(1-fx)*(1-fy)],[1,0,fx*(1-fy)],[0,1,(1-fx)*fy],[1,1,fx*fy]]){
+      mass[i+dy*gw+dx]+=weight*factor;
+      numbers[i+dy*gw+dx]+=factor;
+    }
+  }
+  const blurred=heatGaussian(mass,gw,gh,sigma),density=heatGaussian(numbers,gw,gh,sigma);
+  let peak=0;
+  for(let y=0;y<lines;y++)for(let x=0;x<cols;x++)peak=Math.max(peak,blurred[(y+pad)*gw+x+pad]);
+  if(!peak){canvas.classList.remove('isVisible');return}
+  const oneSchoolKernel=1/(2*Math.PI*sigma*sigma);
+  const cutoff=peak*.12;
+  const thresholdCount=1.10*oneSchoolKernel;
+  const layer=document.createElement('canvas');layer.width=cols;layer.height=lines;
+  const layerCtx=layer.getContext('2d');if(!layerCtx)return;
+  const picture=layerCtx.createImageData(cols,lines);
+  let hasColor=false;
+  for(let y=0;y<lines;y++)for(let x=0;x<cols;x++){
+    const i=(y+pad)*gw+x+pad,raw=blurred[i];
+    // Una sola escuela aislada no se convierte en un halo espectral.
+    if(raw<=cutoff||density[i]<=thresholdCount)continue;
+    const t=Math.min(1,(raw-cutoff)/Math.max(1e-8,peak-cutoff));
+    const v=Math.min(3.999,t*4),k=Math.floor(v),mix=v-k;
+    const a=HEAT_STOPS[k],b=HEAT_STOPS[k+1],j=(y*cols+x)*4;
+    picture.data[j]=Math.round(a[0]+(b[0]-a[0])*mix);
+    picture.data[j+1]=Math.round(a[1]+(b[1]-a[1])*mix);
+    picture.data[j+2]=Math.round(a[2]+(b[2]-a[2])*mix);
+    picture.data[j+3]=Math.round(210*Math.pow(t,.73));
+    hasColor=true;
+  }
+  layerCtx.putImageData(picture,0,0);
+  ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+  ctx.drawImage(layer,0,0,w,h);
+  canvas.classList.toggle('isVisible',hasColor);
+}
+function scheduleHeat(side){
+  if(!state.toggles[side].heat)return;
+  if(state.heatFrames[side])cancelAnimationFrame(state.heatFrames[side]);
+  state.heatFrames[side]=requestAnimationFrame(()=>{
+    state.heatFrames[side]=0;
+    if(state.views[side]?.stationary!==false)drawHeat(side);
+  });
+}
 /* Leyenda vinculada a la simbología real: los cinco intervalos usan
    exactamente los mismos cortes que pointSymbol, sin alterar el renderer. */
 function renderLegend(side,rows,c){
@@ -223,7 +318,12 @@ function renderLegend(side,rows,c){
   if(enabled.clusters){
     sections.push('<div class="legendGroup legendCluster"><span class="legendGroupTitle">Clústeres</span><div class="legendBands"><span class="legendClusterCircle" aria-hidden="true">N</span><span>N = escuelas agrupadas</span></div></div>');
   }
-  target.innerHTML=sections.join('')||'<span class="muted">Activa puntos o clústeres para ver su simbología.</span>';
+  if(enabled.heat){
+    const active=rows.filter(r=>(value(r,c.metric,c.grade)??0)>0);
+    const cases=active.reduce((n,r)=>n+value(r,c.metric,c.grade),0);
+    sections.push('<div class="legendGroup"><span class="legendGroupTitle">Calor · concentración espacial de casos</span><div class="legendBands"><span>Menor</span><i class="legendHeatScale" aria-hidden="true"></i><span>Mayor</span></div><span class="muted">'+fmt(cases)+' casos · '+fmt(active.length)+' escuelas con casos; intensidad relativa, no casos por color</span></div>');
+  }
+  target.innerHTML=sections.join('')||'<span class="muted">Activa puntos, clústeres o calor para ver su simbología.</span>';
 }
 function renderMap(side){
   const c=control(side),rows=filtered(side);state.rows[side]=rows;
@@ -233,6 +333,7 @@ function renderMap(side){
   const view=state.views[side];
   const layer=state.points[side];
   if(layer){layer.removeAll();layer.addMany(graphicsFor(rows,side));layer.visible=true}
+  if(state.toggles[side].heat)scheduleHeat(side);
 
 }
 function redrawClusters(side){
@@ -299,8 +400,12 @@ function createView(side){
     state.mapReady[side]=true;
     resetView(side);renderMap(side);
     // La recomposición de clústeres se realiza solo cuando termina el zoom o el desplazamiento.
-    view.watch('stationary',stable=>{if(stable)redrawClusters(side)});
-    view.watch('width',()=>redrawClusters(side));
+    view.watch('stationary',stable=>{
+      if(stable){redrawClusters(side);scheduleHeat(side)}
+      else $('heat'+side).classList.remove('isVisible');
+    });
+    view.watch('width',()=>{redrawClusters(side);scheduleHeat(side)});
+    view.watch('height',()=>scheduleHeat(side));
   }).catch(e=>showError('No se pudo iniciar el mapa Esri: '+e.message));
   view.on('click',event=>handleMapClick(side,event));
 }
@@ -320,7 +425,7 @@ function bind(){
         if(event.key==='Escape'){input.value='';refresh(side)}
       });
     }
-    for(const [id,type] of [['showSchools','points'],['showClusters','clusters']]){
+    for(const [id,type] of [['showSchools','points'],['showClusters','clusters'],['showHeat','heat']]){
       el(side,id).addEventListener('click',()=>setToggle(side,type,!state.toggles[side][type]));
     }
     el(side,'clear').addEventListener('click',()=>clearFilters(side));
