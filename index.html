@@ -8,12 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261112-pri-calor">
 </head>
 <body>
   <header>
     <div class="institutionalBrand"><img class="govLogo" src="assets/gobierno-mexico-horizontal.png" alt="Gobierno de México"></div>
-    <div class="headerCopy"><span class="eyebrow">SISTEMA DE INFORMACIÓN GEOGRÁFICA · CDMX</span><h1>Trayectorias educativas de secundaria</h1><p>No promoción · Abandono · No certificación</p></div>
+    <div class="headerCopy"><span class="eyebrow">SISTEMA DE INFORMACIÓN GEOGRÁFICA · CDMX</span><h1>Trayectorias educativas de primaria y secundaria</h1><p>No promoción · Abandono · No certificación</p></div>
     <button id="toggleCompare" class="primary">Comparar mapas</button>
   </header>
   <main>
@@ -28,6 +28,7 @@
             <summary><span>Filtros mapa A <small id="filterCaptionA">2025–2026</small></span><span class="disclosureHint">Mostrar / ocultar</span></summary>
             <div class="filterBody"><div class="filterFields">
               <label>Ciclo escolar<select id="cycle"><option value="2025-2026">2025–2026</option><option value="2026-2027">2026–2027</option></select></label>
+              <label>Nivel educativo<select id="nivel"><option value="">Todos los niveles</option><option value="Primaria">Primaria</option><option value="Secundaria">Secundaria</option></select></label>
               <label>Alcaldía<select id="alcaldia"><option value="">Todas las alcaldías</option></select></label>
               <label>Sostenimiento<select id="sostenimiento"><option value="">Todos</option></select></label>
               <label>Variable<select id="metric"><option value="total">Total combinado</option><option value="no_promovidos">No promovidos</option><option value="abandono">Abandono</option><option value="no_certificado">No certificados</option></select></label>
@@ -47,6 +48,7 @@
             <summary><span>Filtros mapa B <small id="filterCaptionB">2026–2027</small></span><span class="disclosureHint">Mostrar / ocultar</span></summary>
             <div class="filterBody"><div class="filterFields">
               <label>Ciclo escolar<select id="cycleB"><option value="2025-2026">2025–2026</option><option value="2026-2027" selected>2026–2027</option></select></label>
+              <label>Nivel educativo<select id="nivelB"><option value="">Todos los niveles</option><option value="Primaria">Primaria</option><option value="Secundaria">Secundaria</option></select></label>
               <label>Alcaldía<select id="alcaldiaB"><option value="">Todas las alcaldías</option></select></label>
               <label>Sostenimiento<select id="sostenimientoB"><option value="">Todos</option></select></label>
               <label>Variable<select id="metricB"><option value="total">Total combinado</option><option value="no_promovidos">No promovidos</option><option value="abandono">Abandono</option><option value="no_certificado">No certificados</option></select></label>
@@ -72,6 +74,6 @@
     </section>
     <aside class="detail hidden" id="detail" aria-label="Ficha escolar"><div class="detailHead"><h2 id="detailTitle">Ficha escolar</h2><button id="closeDetail" aria-label="Cerrar ficha escolar" type="button">×</button></div><div id="detailContent" class="note"></div><button id="compareSelected" class="secondary" type="button" disabled>Comparar este CCT</button></aside>
   </main>
-  <script src="https://js.arcgis.com/4.31/"></script><script src="script.js"></script>
+  <script src="https://js.arcgis.com/4.31/"></script><script src="script.js?v=20261112-pri-calor"></script>
 </body>
 </html>

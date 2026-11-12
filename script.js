@@ -1,4 +1,4 @@
-/* Trayectorias educativas de secundaria · ArcGIS Maps SDK 4.31 */
+/* Trayectorias educativas de primaria y secundaria · ArcGIS Maps SDK 4.31 */
 'use strict';
 const $ = id => document.getElementById(id);
 const fmt = n => n == null || !Number.isFinite(Number(n)) ? '—' : Number(n).toLocaleString('es-MX');
@@ -16,7 +16,7 @@ function school(row,cycle,index){
   if(!cct)return null;
   const read=k=>numeric(row[k]);
   const noProm=read('no_promovidos_total'), abandon=read('abandono_total'), noCert=read('no_certificado_3');
-  return {oid:index+1,cycle,cct,nombre:String(row.nombre??'Escuela'),alcaldia:normalize(row.alcaldia),sostenimiento:String(row.sostenimiento??'').trim(),turno:String(row.turno??''),domicilio:String(row.domicilio??''),matricula:read('matricula'),lat:numeric(row.latitud??row.lat),lon:numeric(row.longitud??row.lon),no_promovidos_1:read('no_promovidos_1'),no_promovidos_2:read('no_promovidos_2'),no_promovidos_3:read('no_promovidos_3'),no_promovidos_total:noProm,no_promovidos_otros:read('no_promovidos_otros'),abandono_1:read('abandono_1'),abandono_2:read('abandono_2'),abandono_3:read('abandono_3'),abandono_total:abandon,no_certificado_3:noCert,total_casos:[noProm,abandon,noCert].some(v=>v!==null)?[noProm,abandon,noCert].reduce((s,v)=>s+(v??0),0):null};
+  return {oid:index+1,cycle,cct,nombre:String(row.nombre??'Escuela'),nivel:String(row.nivel||'Secundaria'),alcaldia:normalize(row.alcaldia),sostenimiento:String(row.sostenimiento??'').trim(),turno:String(row.turno??''),domicilio:String(row.domicilio??''),matricula:read('matricula'),lat:numeric(row.latitud??row.lat),lon:numeric(row.longitud??row.lon),no_promovidos_1:read('no_promovidos_1'),no_promovidos_2:read('no_promovidos_2'),no_promovidos_3:read('no_promovidos_3'),no_promovidos_4:read('no_promovidos_4'),no_promovidos_5:read('no_promovidos_5'),no_promovidos_6:read('no_promovidos_6'),no_promovidos_total:noProm,no_promovidos_otros:read('no_promovidos_otros'),abandono_1:read('abandono_1'),abandono_2:read('abandono_2'),abandono_3:read('abandono_3'),abandono_4:read('abandono_4'),abandono_5:read('abandono_5'),abandono_6:read('abandono_6'),abandono_total:abandon,no_certificado_3:noCert,total_casos:[noProm,abandon,noCert].some(v=>v!==null)?[noProm,abandon,noCert].reduce((s,v)=>s+(v??0),0):null};
 }
 function value(r,metric,grade){
   if(metric==='total'){
@@ -24,26 +24,28 @@ function value(r,metric,grade){
     const parts=[r['no_promovidos_'+grade],r['abandono_'+grade],...(grade==='3'?[r.no_certificado_3]:[])];
     return parts.some(v=>v!==null)?parts.reduce((n,v)=>n+(v??0),0):null;
   }
-  if(metric==='no_certificado')return grade==='1'||grade==='2'?null:r.no_certificado_3;
+  if(metric==='no_certificado')return grade!=='3'&&grade!=='total'?null:r.no_certificado_3;
   return r[metric+'_'+(grade==='total'?'total':grade)]??null;
 }
 function el(side,id){return $(id+(side==='B'?'B':''))}
 function control(side){
-  return {cycle:el(side,'cycle').value,alcaldia:el(side,'alcaldia').value,sostenimiento:el(side,'sostenimiento').value,metric:el(side,'metric').value,grade:el(side,'grado').value,minimum:Math.max(0,Number(el(side,'minimum').value)||0),search:normalize(el(side,'search').value)};
+  return {cycle:el(side,'cycle').value,nivel:el(side,'nivel').value,alcaldia:el(side,'alcaldia').value,sostenimiento:el(side,'sostenimiento').value,metric:el(side,'metric').value,grade:el(side,'grado').value,minimum:Math.max(0,Number(el(side,'minimum').value)||0),search:normalize(el(side,'search').value)};
 }
-function available(c){return state.data[c.cycle]||[]}
+function available(c){return (state.data[c.cycle]||[]).filter(r=>!c.nivel||r.nivel===c.nivel)}
 function matches(r,c,withSearch=true){return (!c.alcaldia||r.alcaldia===c.alcaldia)&&(!c.sostenimiento||r.sostenimiento===c.sostenimiento)&&(!withSearch||!c.search||normalize(r.cct+' '+r.nombre).includes(c.search))}
 function filtered(side){const c=control(side);return available(c).filter(r=>r.lat!==null&&r.lon!==null&&matches(r,c)&&value(r,c.metric,c.grade)!==null&&value(r,c.metric,c.grade)>=c.minimum)}
 function unique(rows,key){return [...new Set(rows.map(r=>r[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'))}
 function options(id,values,prefix){const elem=$(id),prev=elem.value;elem.replaceChildren(new Option(prefix,''),...values.map(v=>new Option(v,v)));if(values.includes(prev))elem.value=prev}
 function refreshGradeOptions(side){
   const c=control(side),rows=available(c),grade=el(side,'grado'),prev=grade.value;
-  const choices=[['total','Todos / total'],['1','1.º'],['2','2.º'],['3','3.º']].filter(([key])=>rows.some(r=>value(r,c.metric,key)!==null));
+  const choices=[['total','Todos / total'],...Array.from({length:6},(_,i)=>[String(i+1),String(i+1)+'.º'])].filter(([key])=>rows.some(r=>value(r,c.metric,key)!==null));
   grade.replaceChildren(...choices.map(([key,text])=>new Option(text,key)));
   if(choices.some(([key])=>key===prev))grade.value=prev;
 }
 function populateCycleFilters(side){
-  const c=control(side),rows=available(c);
+  const c=control(side);
+  options(side==='B'?'nivelB':'nivel',unique(state.data[c.cycle]||[],'nivel'),'Todos los niveles');
+  const rows=available(control(side));
   const metric=el(side,'metric'),prevMetric=metric.value;
   const metricKeys=Object.keys(METRICS).filter(key=>rows.some(r=>value(r,key,'total')!==null));
   metric.replaceChildren(...metricKeys.map(key=>new Option(METRICS[key],key)));
@@ -64,7 +66,7 @@ function fillSchoolSelect(side){
   if(rows.some(r=>r.cct===prev))elem.value=prev;
 }
 function rowsForDetail(r){
-  return [['CCT',r.cct],['Ciclo escolar',r.cycle],['Alcaldía',r.alcaldia],['Sostenimiento',r.sostenimiento],['Turno',r.turno],['Domicilio',r.domicilio],['Matrícula',r.matricula],['No promovidos 1.º',r.no_promovidos_1],['No promovidos 2.º',r.no_promovidos_2],['No promovidos 3.º',r.no_promovidos_3],['No promovidos total',r.no_promovidos_total],['No promovidos en otros grados registrados',r.no_promovidos_otros],['Abandono 1.º',r.abandono_1],['Abandono 2.º',r.abandono_2],['Abandono 3.º',r.abandono_3],['Abandono total',r.abandono_total],['No certificados 3.º',r.no_certificado_3],['Total combinado',r.total_casos]].filter(([,v])=>v!==null&&v!==undefined&&String(v).trim()!==''&&!['SIN DATO','SIN REGISTRO'].includes(normalize(v)));
+  return [['CCT',r.cct],['Ciclo escolar',r.cycle],['Nivel educativo',r.nivel],['Alcaldía',r.alcaldia],['Sostenimiento',r.sostenimiento],['Turno',r.turno],['Domicilio',r.domicilio],['Matrícula',r.matricula],['No promovidos 1.º',r.no_promovidos_1],['No promovidos 2.º',r.no_promovidos_2],['No promovidos 3.º',r.no_promovidos_3],['No promovidos 4.º',r.no_promovidos_4],['No promovidos 5.º',r.no_promovidos_5],['No promovidos 6.º',r.no_promovidos_6],['No promovidos total',r.no_promovidos_total],['No promovidos en otros grados registrados',r.no_promovidos_otros],['Abandono 1.º',r.abandono_1],['Abandono 2.º',r.abandono_2],['Abandono 3.º',r.abandono_3],['Abandono 4.º',r.abandono_4],['Abandono 5.º',r.abandono_5],['Abandono 6.º',r.abandono_6],['Abandono total',r.abandono_total],['No certificados 3.º',r.no_certificado_3],['Total combinado',r.total_casos]].filter(([,v])=>v!==null&&v!==undefined&&String(v).trim()!==''&&!['SIN DATO','SIN REGISTRO'].includes(normalize(v)));
 }
 function tableFromRows(rows){return '<table class="dataTable"><tbody>'+rows.map(([key,val])=>'<tr><th>'+escapeHTML(key)+'</th><td>'+escapeHTML(typeof val==='number'?fmt(val):val)+'</td></tr>').join('')+'</tbody></table>'}
 function renderDetail(r,side='A'){
@@ -95,7 +97,7 @@ function renderComparison(){
     if(!r)return '<span class="muted">Selecciona un CCT</span>';
     return '<strong>'+escapeHTML(r.nombre)+'</strong><span class="pill">'+escapeHTML(r.cct+' · '+r.cycle)+'</span><small>'+escapeHTML([r.alcaldia,r.sostenimiento].filter(Boolean).join(' · '))+'</small>';
   };
-  const omit=new Set(['CCT','Ciclo escolar','Alcaldía','Sostenimiento','Turno','Domicilio']);
+  const omit=new Set(['CCT','Ciclo escolar','Nivel educativo','Alcaldía','Sostenimiento','Turno','Domicilio']);
   const ra=new Map(a?rowsForDetail(a).filter(([label])=>!omit.has(label)):[]);
   const rb=new Map(b?rowsForDetail(b).filter(([label])=>!omit.has(label)):[]);
   const names=[...new Set([...ra.keys(),...rb.keys()])];
@@ -140,10 +142,11 @@ function updateSummary(){
   $('countCases').textContent=fmt(nums.reduce((sum,n)=>sum+n,0));
   $('countMax').textContent=nums.length?fmt(Math.max(...nums)):'—';
   const missing=available(c).filter(r=>r.lat===null||r.lon===null).length;
-  $('sourceNote').textContent=(c.cycle==='2025-2026'?'2025–2026: no promovidos y abandono del visor de Secundarias; no certificados de 3.º del Excel actualizado.':'2026–2027: no promovidos y no certificados de los Excel recibidos.')+(missing?' '+fmt(missing)+' CCT sin coordenadas siguen disponibles en la ficha comparativa.':'');
+  $('sourceNote').textContent=(c.cycle==='2025-2026'?'2025–2026: primaria y secundaria; abandono y reprobados (no promovidos) de las bases depuradas, no certificados de 3.º de secundaria.':'2026–2027: no promovidos de primaria y secundaria; no certificados de secundaria cuando existe registro.')+(missing?' '+fmt(missing)+' CCT sin coordenadas siguen disponibles en la ficha comparativa.':'');
 }
 function setToggle(side,type,on){
   state.toggles[side][type]=on;
+  if(type==='heat'&&!on&&state.heat[side])state.heat[side].style.display='none';
   const id=type==='points'?'showSchools':type==='clusters'?'showClusters':'showHeat';
   const btn=el(side,id);btn.setAttribute('aria-pressed',String(on));btn.classList.toggle('isActive',on);
   renderMap(side);
@@ -193,31 +196,83 @@ function graphicsFor(rows,side){
   return output;
 }
 function pointSymbol(r,c,max){const n=value(r,c.metric,c.grade)||0;return {type:'simple-marker',style:'circle',size:9,color:palette[max===0?0:Math.min(4,Math.floor(n/max*5))],outline:{color:'#fff',width:1}}}
-function makeHeatLayer(rows,side){
-  const c=control(side),active=rows.filter(r=>(value(r,c.metric,c.grade)??0)>0);
-  if(!active.length)return null;
-  // HeatmapRenderer (ArcGIS 4.31) usa densidad de kernel, no los valores brutos
-  // de la variable. maxDensity en decenas ocultaba todos los colores.
-  // Raíz cuadrada reduce el efecto de escuelas atípicas manteniendo el peso por casos.
-  const weights=active.map(r=>Math.sqrt(value(r,c.metric,c.grade))).sort((a,b)=>a-b);
-  const p90=weights[Math.min(weights.length-1,Math.floor(weights.length*0.9))];
-  const source=active.map((r,i)=>new state.Graphic({geometry:geometry(r),attributes:{ObjectID:i+1,peso:Math.sqrt(value(r,c.metric,c.grade))}}));
-  return new state.FeatureLayer({
-    title:'Zonas de calor · '+c.cycle,
-    source,objectIdField:'ObjectID',geometryType:'point',spatialReference:{wkid:4326},
-    fields:[{name:'ObjectID',type:'oid'},{name:'peso',type:'double'}],
-    renderer:{type:'heatmap',field:'peso',radius:40,minDensity:0,
-      maxDensity:Math.max(0.045,Math.min(0.38,p90*0.045)),
-      colorStops:[
-        {ratio:0,color:'rgba(230,209,148,0)'},
-        {ratio:0.07,color:'rgba(230,209,148,0.28)'},
-        {ratio:0.22,color:'rgba(230,209,148,0.66)'},
-        {ratio:0.42,color:'rgba(166,128,45,0.83)'},
-        {ratio:0.68,color:'rgba(155,34,71,0.93)'},
-        {ratio:1,color:'rgba(97,18,50,0.98)'}
-      ]},
-    popupEnabled:false,visible:true,opacity:0.9,listMode:'hide'
-  });
+/* Superficie de calor cartográfica sobre MapView de ESRI.
+   Se pinta en un canvas transparente sincronizado con zoom/extent. Evita depender
+   de maxDensity del HeatmapRenderer (la implementación anterior resultaba invisible).
+   Al no recibir eventos de puntero, nunca bloquea los clics en los CCT. */
+function heatCanvas(side){
+  const container=$('map'+side);
+  let canvas=state.heat[side];
+  if(canvas)return canvas;
+  canvas=document.createElement('canvas');
+  canvas.className='heatOverlay';
+  canvas.setAttribute('aria-hidden','true');
+  container.appendChild(canvas);
+  state.heat[side]=canvas;
+  return canvas;
+}
+function paintHeat(side){
+  const canvas=state.heat[side];
+  if(!canvas)return;
+  const active=state.toggles[side].heat;
+  canvas.style.display=active?'block':'none';
+  if(!active)return;
+  const view=state.views[side],map=$('map'+side);
+  if(!view?.ready)return;
+  const w=Math.round(map.clientWidth),h=Math.round(map.clientHeight);
+  if(w<20||h<20)return;
+  // Resolución intermedia para mantener fluida la navegación con miles de CCT.
+  const ratio=0.68,tw=Math.ceil(w*ratio),th=Math.ceil(h*ratio);
+  if(canvas.width!==tw)canvas.width=tw;
+  if(canvas.height!==th)canvas.height=th;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx)return;
+  ctx.clearRect(0,0,tw,th);
+  const off=document.createElement('canvas');off.width=tw;off.height=th;
+  const sum=off.getContext('2d',{willReadFrequently:true});
+  if(!sum)return;
+  sum.fillStyle='#000';sum.fillRect(0,0,tw,th);
+  sum.globalCompositeOperation='lighter';
+  const c=control(side),rows=state.rows[side]||[];
+  const meaningful=rows.filter(r=>(value(r,c.metric,c.grade)??0)>0);
+  if(!meaningful.length)return;
+  const vals=meaningful.map(r=>value(r,c.metric,c.grade)).sort((a,b)=>a-b);
+  const high=Math.max(1,vals[Math.floor((vals.length-1)*0.95)]);
+  const radius=25*ratio;
+  for(const r of meaningful){
+    const p=view.toScreen(geometry(r));
+    if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))continue;
+    const x=p.x*ratio,y=p.y*ratio;
+    if(x<-radius||x>tw+radius||y<-radius||y>th+radius)continue;
+    const cases=value(r,c.metric,c.grade);
+    const weight=Math.min(1,Math.sqrt(cases/high));
+    const intensity=0.035+0.135*weight;
+    const grad=sum.createRadialGradient(x,y,0,x,y,radius);
+    grad.addColorStop(0,`rgba(255,255,255,${intensity})`);
+    grad.addColorStop(0.36,`rgba(255,255,255,${intensity*0.58})`);
+    grad.addColorStop(1,'rgba(255,255,255,0)');
+    sum.fillStyle=grad;sum.fillRect(x-radius,y-radius,radius*2,radius*2);
+  }
+  const pixels=sum.getImageData(0,0,tw,th);
+  const dest=ctx.createImageData(tw,th);
+  const scale=[[230,209,148],[166,128,45],[155,34,71],[97,18,50]];
+  for(let i=0;i<pixels.data.length;i+=4){
+    let t=pixels.data[i]/255;
+    if(t<0.065)continue;
+    // Despliegue de la gradación guinda/dorado con bandas continuas.
+    const q=Math.min(2.999,t*3),k=Math.floor(q),a=q-k;
+    const l=scale[k],rr=scale[k+1];
+    dest.data[i]=Math.round(l[0]+(rr[0]-l[0])*a);
+    dest.data[i+1]=Math.round(l[1]+(rr[1]-l[1])*a);
+    dest.data[i+2]=Math.round(l[2]+(rr[2]-l[2])*a);
+    dest.data[i+3]=Math.round(210*Math.min(1,Math.pow(t,0.68)));
+  }
+  ctx.putImageData(dest,0,0);
+}
+function scheduleHeat(side){
+  if(state.heatFrame?.[side])cancelAnimationFrame(state.heatFrame[side]);
+  state.heatFrame??={};
+  state.heatFrame[side]=requestAnimationFrame(()=>{state.heatFrame[side]=null;paintHeat(side)});
 }
 /* Leyenda vinculada a la simbología real: los cinco intervalos usan
    exactamente los mismos cortes que pointSymbol, sin alterar el renderer. */
@@ -266,25 +321,10 @@ function renderMap(side){
   const view=state.views[side];
   const layer=state.points[side];
   if(layer){layer.removeAll();layer.addMany(graphicsFor(rows,side));layer.visible=true}
-  if(state.heat[side]){view.map.remove(state.heat[side]);state.heat[side].destroy();state.heat[side]=null}
-  if(state.toggles[side].heat){
-    const heat=makeHeatLayer(rows,side);
-    if(heat){
-      // Siempre sobre el mapa base y por debajo de puntos y clústeres, sin tapar sus clics.
-      const pointPosition=view.map.layers.indexOf(state.points[side]);
-      view.map.add(heat,pointPosition>=0?pointPosition:view.map.layers.length);
-      state.heat[side]=heat;
-      heat.when().catch(error=>{
-        console.warn('Zonas de calor:',error);
-        $('status').textContent='No fue posible dibujar las zonas de calor: '+error.message;
-      });
-    }else{
-      $('status').textContent='No hay casos positivos para mostrar zonas de calor con estos filtros.';
-    }
-  }else if($('status').textContent.startsWith('No hay casos positivos para mostrar zonas de calor')){
-    $('status').textContent='';
-  }
-  // Los puntos permanecen por encima del calor y conservan la selección por clic.
+  // La superficie se conserva y se repinta; los puntos ESRI siguen siendo clicables.
+  if(state.toggles[side].heat)heatCanvas(side);
+  if(state.heat[side])scheduleHeat(side);
+
 }
 function redrawClusters(side){
   if(!state.mapReady[side]||!state.points[side])return;
@@ -315,8 +355,8 @@ function refresh(side,{cycleChanged=false}={}){
   renderComparison();
 }
 function clearFilters(side){
-  for(const id of ['alcaldia','sostenimiento','metric','grado','minimum','search'])el(side,id).value=id==='metric'||id==='grado'?'total':id==='minimum'?'0':'';
-  $('status').textContent='';fillSchoolSelect(side);refresh(side);resetView(side);
+  for(const id of ['nivel','alcaldia','sostenimiento','metric','grado','minimum','search'])el(side,id).value=id==='metric'||id==='grado'?'total':id==='minimum'?'0':'';
+  $('status').textContent='';populateCycleFilters(side);refresh(side);resetView(side);
 }
 function handleMapClick(side,event){
   const view=state.views[side],layer=state.points[side];if(!layer)return;
@@ -350,20 +390,21 @@ function createView(side){
     state.mapReady[side]=true;
     resetView(side);renderMap(side);
     // La recomposición de clústeres se realiza solo cuando termina el zoom o el desplazamiento.
-    view.watch('stationary',stable=>{if(stable)redrawClusters(side)});
-    view.watch('width',()=>redrawClusters(side));
+    view.watch('stationary',stable=>{if(stable){redrawClusters(side);scheduleHeat(side)}});
+    view.watch('width',()=>{redrawClusters(side);scheduleHeat(side)});
+    view.watch('height',()=>scheduleHeat(side));
   }).catch(e=>showError('No se pudo iniciar el mapa Esri: '+e.message));
   view.on('click',event=>handleMapClick(side,event));
 }
 function showError(message){$('status').textContent=message;console.error(message)}
 function bind(){
   for(const side of ['A','B']){
-    for(const id of ['cycle','alcaldia','sostenimiento','metric','grado','minimum','search']){
+    for(const id of ['cycle','nivel','alcaldia','sostenimiento','metric','grado','minimum','search']){
       const input=el(side,id);
       input.addEventListener(id==='search'||id==='minimum'?'input':'change',()=>{
         if(id==='metric')refreshGradeOptions(side);
-        refresh(side,{cycleChanged:id==='cycle'});
-        if(id==='alcaldia'||id==='sostenimiento')fillSchoolSelect(side);
+        refresh(side,{cycleChanged:id==='cycle'||id==='nivel'});
+        if(id==='alcaldia'||id==='sostenimiento'||id==='nivel')fillSchoolSelect(side);
         if(id==='alcaldia'||id==='sostenimiento')renderComparison();
       });
       if(id==='search')input.addEventListener('keydown',event=>{
