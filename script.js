@@ -8,7 +8,7 @@ const METRICS = {total:'Total combinado', no_promovidos:'No promovidos', abandon
 const DATA = {'2025-2026':'data/trayectorias_2025_2026.json','2026-2027':'data/trayectorias_2026_2027.json'};
 const CDMX = {xmin:-99.38,ymin:19.03,xmax:-98.91,ymax:19.61,spatialReference:{wkid:4326}};
 const palette = ['#e6d194','#a57f2c','#1e5b4f','#9b2247','#611232'];
-const state = {compare:false,selected:null,data:{},views:{},points:{},heat:{},highlights:{},rows:{A:[],B:[]},toggles:{A:{points:true,clusters:true,heat:false},B:{points:true,clusters:true,heat:false}},mapReady:{A:false,B:false},compareOpen:false};
+const state = {compare:false,selected:null,data:{},views:{},points:{},highlights:{},rows:{A:[],B:[]},toggles:{A:{points:true,clusters:true},B:{points:true,clusters:true}},mapReady:{A:false,B:false},compareOpen:false};
 
 function numeric(v){return v == null || v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null)}
 function school(row,cycle,index){
@@ -146,8 +146,7 @@ function updateSummary(){
 }
 function setToggle(side,type,on){
   state.toggles[side][type]=on;
-  if(type==='heat'&&!on&&state.heat[side])state.heat[side].style.display='none';
-  const id=type==='points'?'showSchools':type==='clusters'?'showClusters':'showHeat';
+  const id=type==='points'?'showSchools':'showClusters';
   const btn=el(side,id);btn.setAttribute('aria-pressed',String(on));btn.classList.toggle('isActive',on);
   renderMap(side);
 }
@@ -196,84 +195,6 @@ function graphicsFor(rows,side){
   return output;
 }
 function pointSymbol(r,c,max){const n=value(r,c.metric,c.grade)||0;return {type:'simple-marker',style:'circle',size:9,color:palette[max===0?0:Math.min(4,Math.floor(n/max*5))],outline:{color:'#fff',width:1}}}
-/* Superficie de calor cartográfica sobre MapView de ESRI.
-   Se pinta en un canvas transparente sincronizado con zoom/extent. Evita depender
-   de maxDensity del HeatmapRenderer (la implementación anterior resultaba invisible).
-   Al no recibir eventos de puntero, nunca bloquea los clics en los CCT. */
-function heatCanvas(side){
-  const container=$('map'+side);
-  let canvas=state.heat[side];
-  if(canvas)return canvas;
-  canvas=document.createElement('canvas');
-  canvas.className='heatOverlay';
-  canvas.setAttribute('aria-hidden','true');
-  container.appendChild(canvas);
-  state.heat[side]=canvas;
-  return canvas;
-}
-function paintHeat(side){
-  const canvas=state.heat[side];
-  if(!canvas)return;
-  const active=state.toggles[side].heat;
-  canvas.style.display=active?'block':'none';
-  if(!active)return;
-  const view=state.views[side],map=$('map'+side);
-  if(!view?.ready)return;
-  const w=Math.round(map.clientWidth),h=Math.round(map.clientHeight);
-  if(w<20||h<20)return;
-  // Resolución intermedia para mantener fluida la navegación con miles de CCT.
-  const ratio=0.68,tw=Math.ceil(w*ratio),th=Math.ceil(h*ratio);
-  if(canvas.width!==tw)canvas.width=tw;
-  if(canvas.height!==th)canvas.height=th;
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});
-  if(!ctx)return;
-  ctx.clearRect(0,0,tw,th);
-  const off=document.createElement('canvas');off.width=tw;off.height=th;
-  const sum=off.getContext('2d',{willReadFrequently:true});
-  if(!sum)return;
-  sum.fillStyle='#000';sum.fillRect(0,0,tw,th);
-  sum.globalCompositeOperation='lighter';
-  const c=control(side),rows=state.rows[side]||[];
-  const meaningful=rows.filter(r=>(value(r,c.metric,c.grade)??0)>0);
-  if(!meaningful.length)return;
-  const vals=meaningful.map(r=>value(r,c.metric,c.grade)).sort((a,b)=>a-b);
-  const high=Math.max(1,vals[Math.floor((vals.length-1)*0.95)]);
-  const radius=25*ratio;
-  for(const r of meaningful){
-    const p=view.toScreen(geometry(r));
-    if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))continue;
-    const x=p.x*ratio,y=p.y*ratio;
-    if(x<-radius||x>tw+radius||y<-radius||y>th+radius)continue;
-    const cases=value(r,c.metric,c.grade);
-    const weight=Math.min(1,Math.sqrt(cases/high));
-    const intensity=0.035+0.135*weight;
-    const grad=sum.createRadialGradient(x,y,0,x,y,radius);
-    grad.addColorStop(0,`rgba(255,255,255,${intensity})`);
-    grad.addColorStop(0.36,`rgba(255,255,255,${intensity*0.58})`);
-    grad.addColorStop(1,'rgba(255,255,255,0)');
-    sum.fillStyle=grad;sum.fillRect(x-radius,y-radius,radius*2,radius*2);
-  }
-  const pixels=sum.getImageData(0,0,tw,th);
-  const dest=ctx.createImageData(tw,th);
-  const scale=[[230,209,148],[166,128,45],[155,34,71],[97,18,50]];
-  for(let i=0;i<pixels.data.length;i+=4){
-    let t=pixels.data[i]/255;
-    if(t<0.065)continue;
-    // Despliegue de la gradación guinda/dorado con bandas continuas.
-    const q=Math.min(2.999,t*3),k=Math.floor(q),a=q-k;
-    const l=scale[k],rr=scale[k+1];
-    dest.data[i]=Math.round(l[0]+(rr[0]-l[0])*a);
-    dest.data[i+1]=Math.round(l[1]+(rr[1]-l[1])*a);
-    dest.data[i+2]=Math.round(l[2]+(rr[2]-l[2])*a);
-    dest.data[i+3]=Math.round(210*Math.min(1,Math.pow(t,0.68)));
-  }
-  ctx.putImageData(dest,0,0);
-}
-function scheduleHeat(side){
-  if(state.heatFrame?.[side])cancelAnimationFrame(state.heatFrame[side]);
-  state.heatFrame??={};
-  state.heatFrame[side]=requestAnimationFrame(()=>{state.heatFrame[side]=null;paintHeat(side)});
-}
 /* Leyenda vinculada a la simbología real: los cinco intervalos usan
    exactamente los mismos cortes que pointSymbol, sin alterar el renderer. */
 function renderLegend(side,rows,c){
@@ -302,16 +223,7 @@ function renderLegend(side,rows,c){
   if(enabled.clusters){
     sections.push('<div class="legendGroup legendCluster"><span class="legendGroupTitle">Clústeres</span><div class="legendBands"><span class="legendClusterCircle" aria-hidden="true">N</span><span>N = escuelas agrupadas</span></div></div>');
   }
-  if(enabled.heat){
-    const active=counts.filter(n=>n>0);
-    const sumActive=active.reduce((sum,n)=>sum+n,0);
-    if(active.length){
-      sections.push('<div class="legendGroup legendHeat"><span class="legendGroupTitle">Calor · concentración de casos</span><div class="legendHeatScale"><span>Menor</span><span class="legendGradient" aria-hidden="true"></span><span>Mayor</span></div><small>'+fmt(sumActive)+' casos en '+fmt(active.length)+' escuelas; intensidad espacial, no casos por color</small></div>');
-    }else{
-      sections.push('<div class="legendGroup legendHeat"><span class="legendGroupTitle">Calor</span><span>Sin casos positivos para mostrar</span></div>');
-    }
-  }
-  target.innerHTML=sections.join('')||'<span class="muted">Activa puntos, clústeres o zonas de calor para ver su simbología.</span>';
+  target.innerHTML=sections.join('')||'<span class="muted">Activa puntos o clústeres para ver su simbología.</span>';
 }
 function renderMap(side){
   const c=control(side),rows=filtered(side);state.rows[side]=rows;
@@ -321,9 +233,6 @@ function renderMap(side){
   const view=state.views[side];
   const layer=state.points[side];
   if(layer){layer.removeAll();layer.addMany(graphicsFor(rows,side));layer.visible=true}
-  // La superficie se conserva y se repinta; los puntos ESRI siguen siendo clicables.
-  if(state.toggles[side].heat)heatCanvas(side);
-  if(state.heat[side])scheduleHeat(side);
 
 }
 function redrawClusters(side){
@@ -390,9 +299,8 @@ function createView(side){
     state.mapReady[side]=true;
     resetView(side);renderMap(side);
     // La recomposición de clústeres se realiza solo cuando termina el zoom o el desplazamiento.
-    view.watch('stationary',stable=>{if(stable){redrawClusters(side);scheduleHeat(side)}});
-    view.watch('width',()=>{redrawClusters(side);scheduleHeat(side)});
-    view.watch('height',()=>scheduleHeat(side));
+    view.watch('stationary',stable=>{if(stable)redrawClusters(side)});
+    view.watch('width',()=>redrawClusters(side));
   }).catch(e=>showError('No se pudo iniciar el mapa Esri: '+e.message));
   view.on('click',event=>handleMapClick(side,event));
 }
@@ -412,7 +320,7 @@ function bind(){
         if(event.key==='Escape'){input.value='';refresh(side)}
       });
     }
-    for(const [id,type] of [['showSchools','points'],['showClusters','clusters'],['showHeat','heat']]){
+    for(const [id,type] of [['showSchools','points'],['showClusters','clusters']]){
       el(side,id).addEventListener('click',()=>setToggle(side,type,!state.toggles[side][type]));
     }
     el(side,'clear').addEventListener('click',()=>clearFilters(side));
