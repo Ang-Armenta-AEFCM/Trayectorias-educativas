@@ -67,8 +67,8 @@
       <div class="noticeArea"><p id="sourceNote" class="note"></p><p id="status" class="status" role="status" aria-live="polite"></p></div>
       <section id="comparePanel" class="comparePanel hidden"><div class="compareHead"><div><h2>Ficha comparativa por CCT</h2><p>Elige dos CCT diferentes o el mismo CCT entre ciclos. Alcaldía, ciclo y sostenimiento se eligen arriba, en cada mapa.</p></div><button id="closeCompare" class="secondary">Cerrar ficha</button></div>
         <div class="compareSelectors">
-          <label for="compareCctA"><span>Escuela A · <span id="compareCycleA">2025–2026</span></span><select id="compareCctA"><option value="">Selecciona un CCT</option></select></label>
-          <label for="compareCctB"><span>Escuela B · <span id="compareCycleB">2026–2027</span></span><select id="compareCctB"><option value="">Selecciona un CCT</option></select></label>
+          <label for="compareCctA"><span>Escuela A · <span id="compareCycleA">2025–2026</span></span><input id="compareCctA" type="search" list="compareOptionsA" autocomplete="off" placeholder="Buscar CCT o nombre de escuela" aria-label="Buscar CCT o escuela A"><datalist id="compareOptionsA"></datalist></label>
+          <label for="compareCctB"><span>Escuela B · <span id="compareCycleB">2026–2027</span></span><input id="compareCctB" type="search" list="compareOptionsB" autocomplete="off" placeholder="Buscar CCT o nombre de escuela" aria-label="Buscar CCT o escuela B"><datalist id="compareOptionsB"></datalist></label>
         </div><div id="compareResult" class="compareResult"></div>
       </section>
     </section>

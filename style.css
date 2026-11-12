@@ -78,3 +78,15 @@ main{height:auto;min-height:calc(100vh - 90px)}
 @media(max-width:540px){.mapWrap,.mapGrid.comparing .mapWrap{height:445px;min-height:445px}}
 /* Escala del calor: distribución espacial continua, no halos por escuela. */
 .legendHeatScale{display:inline-block;width:112px;height:11px;border-radius:3px;background:linear-gradient(90deg,#1e5b4f 0%,#e6d194 26%,#a57f2c 57%,#9b2247 78%,#611232 100%);border:1px solid rgba(0,0,0,.12)}
+
+/* Comparación: proporciones constantes y desplazamiento de página */
+html{scroll-behavior:smooth;scroll-padding-top:14px}
+body{overflow-y:auto;overscroll-behavior-y:contain}
+.mapGrid{align-items:stretch;grid-auto-rows:1fr}
+.mapGrid.comparing{align-items:stretch;grid-template-columns:repeat(2,minmax(0,1fr))}
+.mapGrid.comparing .mapCard{height:100%;min-width:0}
+.mapGrid.comparing .mapWrap{height:clamp(510px,65vh,760px);min-height:510px}
+.mapGrid.comparing .filterBody{min-height:0}
+.compareSelectors input{min-height:34px;padding:6px 8px}
+@media(max-width:820px){.mapGrid.comparing{grid-template-columns:minmax(0,1fr)}.mapGrid.comparing .mapWrap{height:500px;min-height:500px}}
+@media(max-width:540px){.mapGrid.comparing .mapWrap{height:445px;min-height:445px}}

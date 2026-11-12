@@ -57,13 +57,33 @@ function populateCycleFilters(side){
   $('filterCaption'+side).textContent=c.cycle;
   $('compareCycle'+side).textContent=c.cycle;
 }
+function comparisonCandidates(side){
+  const c=control(side);
+  return available(c).filter(r=>matches(r,c,false)).sort((a,b)=>a.cct.localeCompare(b.cct));
+}
+function resolveComparison(side){
+  const input=$('compareCct'+side),query=normalize(input.value);
+  if(!query)return null;
+  const rows=comparisonCandidates(side);
+  return rows.find(r=>r.cct===query)||rows.find(r=>normalize(r.cct+' · '+r.nombre)===query)||
+    (rows.filter(r=>normalize(r.nombre)===query).length===1?rows.find(r=>normalize(r.nombre)===query):null);
+}
 function fillSchoolSelect(side){
-  const c=control(side),elem=$('compareCct'+side),prev=elem.value;
-  // Los CCT de la comparación usan el ciclo, alcaldía y sostenimiento del mapa correspondiente.
-  // No se excluyen CCT por su métrica, grado o mínimo: la ficha puede mostrar otras variables.
-  const rows=available(c).filter(r=>matches(r,c,false)).sort((a,b)=>a.cct.localeCompare(b.cct));
-  elem.replaceChildren(new Option('Selecciona un CCT',''),...rows.map(r=>new Option(r.cct+' · '+r.nombre,r.cct)));
-  if(rows.some(r=>r.cct===prev))elem.value=prev;
+  const input=$('compareCct'+side),list=$('compareOptions'+side);
+  const rows=comparisonCandidates(side);
+  list.replaceChildren(...rows.map(r=>new Option(r.cct+' · '+r.nombre)));
+  if(input.value && !resolveComparison(side))input.setCustomValidity('');
+}
+function selectComparisonCct(side,r){
+  const cycle=el(side,'cycle');
+  if(cycle.value!==r.cycle){cycle.value=r.cycle;populateCycleFilters(side)}
+  for(const id of ['nivel','alcaldia','sostenimiento']){
+    const field=el(side,id),target=id==='nivel'?r.nivel:id==='alcaldia'?r.alcaldia:r.sostenimiento;
+    if(field.value && field.value!==target){field.value='';}
+  }
+  fillSchoolSelect(side);
+  $('compareCct'+side).value=r.cct;
+  refresh(side);
 }
 function rowsForDetail(r){
   return [['CCT',r.cct],['Ciclo escolar',r.cycle],['Nivel educativo',r.nivel],['Alcaldía',r.alcaldia],['Sostenimiento',r.sostenimiento],['Turno',r.turno],['Domicilio',r.domicilio],['Matrícula',r.matricula],['No promovidos 1.º',r.no_promovidos_1],['No promovidos 2.º',r.no_promovidos_2],['No promovidos 3.º',r.no_promovidos_3],['No promovidos 4.º',r.no_promovidos_4],['No promovidos 5.º',r.no_promovidos_5],['No promovidos 6.º',r.no_promovidos_6],['No promovidos total',r.no_promovidos_total],['No promovidos en otros grados registrados',r.no_promovidos_otros],['Abandono 1.º',r.abandono_1],['Abandono 2.º',r.abandono_2],['Abandono 3.º',r.abandono_3],['Abandono 4.º',r.abandono_4],['Abandono 5.º',r.abandono_5],['Abandono 6.º',r.abandono_6],['Abandono total',r.abandono_total],['No certificados 3.º',r.no_certificado_3],['Total combinado',r.total_casos]].filter(([,v])=>v!==null&&v!==undefined&&String(v).trim()!==''&&!['SIN DATO','SIN REGISTRO'].includes(normalize(v)));
@@ -85,7 +105,7 @@ function renderClusterDetail(rows,side){
   $('detail').classList.remove('hidden');$('detail').scrollTop=0;
 }
 function closeDetail(){state.selected=null;$('detail').classList.add('hidden');$('compareSelected').disabled=true;for(const side of ['A','B'])state.highlights[side]?.removeAll()}
-function findSelected(side){const c=control(side);return available(c).find(r=>r.cct===$('compareCct'+side).value)}
+function findSelected(side){return resolveComparison(side)}
 function renderComparison(){
   if(!state.compareOpen)return;
   const a=findSelected('A'),b=findSelected('B');
@@ -94,7 +114,7 @@ function renderComparison(){
     return;
   }
   const brief=(r,side)=>{
-    if(!r)return '<span class="muted">Selecciona un CCT</span>';
+    if(!r)return '<span class="muted">Busca y selecciona un CCT para comparar</span>';
     return '<strong>'+escapeHTML(r.nombre)+'</strong><span class="pill">'+escapeHTML(r.cct+' · '+r.cycle)+'</span><small>'+escapeHTML([r.alcaldia,r.sostenimiento].filter(Boolean).join(' · '))+'</small>';
   };
   const omit=new Set(['CCT','Ciclo escolar','Nivel educativo','Alcaldía','Sostenimiento','Turno','Domicilio']);
@@ -109,15 +129,14 @@ function openCompare(selected=null){
   if(!state.compare)toggleCompare(true);
   setCompareOpen(true);
   if(selected){
-    const {row:r,side}=selected;
-    // No forzar el mismo CCT en ambos mapas: el otro selector es totalmente independiente.
-    // Si el CCT viene de una ficha, adaptar únicamente el filtro territorial de su lado.
-    if(available(control(side)).some(x=>x.cct===r.cct)){
-      if(el(side,'alcaldia').value && el(side,'alcaldia').value!==r.alcaldia){el(side,'alcaldia').value='';}
-      if(el(side,'sostenimiento').value && el(side,'sostenimiento').value!==r.sostenimiento){el(side,'sostenimiento').value='';}
-      fillSchoolSelect(side);
-      $('compareCct'+side).value=r.cct;
-    }
+    const {row:r,side}=selected,other=side==='A'?'B':'A';
+    selectComparisonCct(side,r);
+    const oppositeCycle=r.cycle==='2025-2026'?'2026-2027':'2025-2026';
+    const otherCycle=el(other,'cycle');
+    if(otherCycle.value!==oppositeCycle){otherCycle.value=oppositeCycle;populateCycleFilters(other)}
+    const match=(state.data[oppositeCycle]||[]).find(x=>x.cct===r.cct);
+    if(match){selectComparisonCct(other,match)}
+    else{$('compareCct'+other).value='';fillSchoolSelect(other);refresh(other)}
   }
   renderComparison();
   $('comparePanel').scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -517,7 +536,18 @@ function bind(){
       el(side,id).addEventListener('click',()=>setToggle(side,type,!state.toggles[side][type]));
     }
     el(side,'clear').addEventListener('click',()=>clearFilters(side));
+    $('compareCct'+side).addEventListener('input',renderComparison);
     $('compareCct'+side).addEventListener('change',renderComparison);
+    $('compareCct'+side).addEventListener('keydown',event=>{
+      if(event.key==='Enter'){
+        event.preventDefault();
+        const input=$('compareCct'+side),query=normalize(input.value);
+        const exact=resolveComparison(side);
+        const matches=comparisonCandidates(side).filter(r=>normalize(r.cct+' '+r.nombre).includes(query));
+        const found=exact||(query&&matches.length===1?matches[0]:null);
+        if(found){input.value=found.cct;renderComparison()}
+      }
+    });
   }
   $('toggleCompare').addEventListener('click',()=>toggleCompare(!state.compare));
   $('reset').addEventListener('click',()=>{resetView('A');if(state.compare)resetView('B')});
